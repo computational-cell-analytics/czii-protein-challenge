@@ -120,13 +120,14 @@ def supervised_training(
         transform = None
 
     num_workers = 6  # Julias example
+    # num_workers = 0  # Julias example
 
     train_loader, val_loader, _ = create_data_loader(train_paths, train_label_paths,
                                                      val_paths, val_label_paths,
                                                      test_paths, test_label_paths,
                                                      raw_transform=raw_transform, transform=transform,
                                                      patch_shape=patch_shape, num_workers=num_workers,
-                                                     batch_size=batch_size, raw_key= raw_key,
+                                                     batch_size=batch_size, raw_key=raw_key,
                                                      eps=eps, sigma=sigma,
                                                      lower_bound=lower_bound, upper_bound=upper_bound,
                                                      dataset_class=dataset_class,
