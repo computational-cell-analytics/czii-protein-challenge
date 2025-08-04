@@ -93,7 +93,10 @@ def extract_subtomograms(raw_data, peaks, size, halo=4):
         xmax = min(raw_data.shape[2], x + half_size + extra)
         
         cube = raw_data[zmin:zmax, ymin:ymax, xmin:xmax]
-        subtomograms.append(cube)
+
+        #make sure that the bb is fully inside the tomogram
+        if cube.shape == (bbox_size, bbox_size, bbox_size): 
+            subtomograms.append(cube)
 
     return subtomograms
 

@@ -38,12 +38,12 @@ def run_protein_detection(input_path, output_path, model_path, json_val_path):
     os.makedirs(output_folder, exist_ok=True)
 
     #save prediction
-    output_np_file = os.path.join(output_folder, f"{input_name}_protein_detections_peak_local_max.npy")
+    output_np_file = os.path.join(output_folder, f"{input_name}_protein_detections.npy")
     np.save(output_np_file, pred)
     print(f"Heatmap saved to {output_np_file}")
 
     # Save results to a JSON file
-    output_json_file = os.path.join(output_folder, f"{input_name}_protein_detections_peak_local_max.json")
+    output_json_file = os.path.join(output_folder, f"{input_name}_protein_detections.json")
 
     with open(output_json_file, "w") as f:
         json.dump(detections, f, indent=4)

@@ -14,7 +14,6 @@ class ClassificationDataset(torch.utils.data.Dataset):
     Args:
         raw_data: 3D tomogram input (numpy array)
         peaks: list of coordinates for subtomogram extraction
-        target: list of scalar labels corresponding to each coordinate
         max_extent: size used to extract subtomograms
         normalization: function applied to each subtomogram (optional)
         augmentation: data augmentation function (optional)
@@ -24,21 +23,26 @@ class ClassificationDataset(torch.utils.data.Dataset):
         self,
         raw_data: np.ndarray,
         peaks: Sequence[Tuple[int, int, int]],
-        target: Sequence[ArrayLike],
         max_extent: int,
         normalization: Callable = None,
         augmentation: Callable = None,
         image_shape: Tuple[int, int, int] = None,
+        n_classes: int = 2,
     ):
-        if len(peaks) != len(target):
-            raise ValueError(f"Length of peaks and target don't agree: {len(peaks)} != {len(target)}")
 
-        self.target = target
         self.normalization = normalization
         self.augmentation = augmentation
         self.image_shape = image_shape
+        self.n_classes = n_classes
 
         self.data = extract_subtomograms(raw_data, peaks, max_extent)
+
+        n_samples = len(peaks)
+        self.target = list(np.random.randint(0, self.n_classes, size=n_samples))
+
+        if len(peaks) != len(self.target):
+            raise ValueError(f"Length of peaks and target don't agree: {len(peaks)} != {len(self.target)}")
+
 
     def __len__(self):
         return len(self.data)
@@ -62,3 +66,8 @@ class ClassificationDataset(torch.utils.data.Dataset):
             assert x.shape == original_shape
 
         return x, y
+
+    @property
+    def ndim(self):
+        return self.data[0].ndim
+

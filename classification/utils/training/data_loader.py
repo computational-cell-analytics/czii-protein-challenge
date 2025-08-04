@@ -32,36 +32,37 @@ def compute_max_extent_from_all(
         for peaks, heatmap in zip(all_peaks, all_heatmaps)
     ]
     max_extent = max(max_extents)
-    return (max_extent, max_extent, max_extent)
+    return max_extent
 
 
 def _load_dataset(
     raw_data_list: List[np.ndarray],
     peaks_list: List[Sequence[Tuple[int, int, int]]],
-    targets_list: List[Sequence],
-    image_shape: Tuple[int, int, int] = None,
+    image_shape: int = None,
     normalization: Callable = None,
     augmentation: Callable = None,
     dataset_class=ClassificationDataset,
     n_samples: Union[int, None] = None,
+    n_classes: int = 2,
 ) -> torch.utils.data.Dataset:
-    assert len(raw_data_list) == len(peaks_list) == len(targets_list), "Input lists must match in length"
+    assert len(raw_data_list) == len(peaks_list)
+    print(f"n_sample  {n_samples}")
 
     n_datasets = len(raw_data_list)
     samples_per_ds = [None] * n_datasets if n_samples is None else samples_to_datasets(n_samples, n_datasets)
-
+    print(f"n_datasets {n_datasets}")
     datasets = []
     for i in range(n_datasets):
         dataset = dataset_class(
             raw_data=raw_data_list[i],
             peaks=peaks_list[i],
-            target=targets_list[i],
             max_extent=image_shape,
             normalization=normalization,
             augmentation=augmentation,
+            n_classes=n_classes,
         )
         datasets.append(dataset)
-
+    print(f"datasets {datasets}")
     return datasets[0] if len(datasets) == 1 else ConcatDataset(*datasets)
 
 
@@ -71,16 +72,17 @@ def create_data_loader(
     test_data: Tuple[List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray], List[Sequence]],
     normalization: Callable = None,
     augmentation: Callable = None,
-    patch_shape: Tuple[int, int, int] = None,
+    patch_shape: int = None,
     num_workers: int = 4,
     batch_size: int = 8,
     dataset_class=ClassificationDataset,
     n_samples_train: Union[int, None] = None,
     n_samples_val: Union[int, None] = None,
+    n_classes: int = 2,
 ):
-    train_raws, train_peaks, train_heatmaps, train_targets = train_data
-    val_raws, val_peaks, val_heatmaps, val_targets = val_data
-    test_raws, test_peaks, test_heatmaps, test_targets = test_data
+    train_raws, train_peaks, train_heatmaps = train_data
+    val_raws, val_peaks, val_heatmaps = val_data
+    test_raws, test_peaks, test_heatmaps = test_data
 
     # Compute max_extent over all datasets
     all_peaks = train_peaks + val_peaks + test_peaks
@@ -91,21 +93,21 @@ def create_data_loader(
     final_patch_shape = patch_shape if patch_shape is not None else max_extent
 
     train_set = _load_dataset(
-        train_raws, train_peaks, train_targets, final_patch_shape,
+        train_raws, train_peaks, final_patch_shape,
         normalization, augmentation,
-        dataset_class, n_samples_train
+        dataset_class, n_samples_train, n_classes
     )
 
     val_set = _load_dataset(
-        val_raws, val_peaks, val_targets, final_patch_shape,
+        val_raws, val_peaks, final_patch_shape,
         normalization, augmentation,
-        dataset_class, n_samples_val
+        dataset_class, n_samples_val, n_classes
     )
 
     test_set = _load_dataset(
-        test_raws, test_peaks, test_targets, final_patch_shape,
+        test_raws, test_peaks, final_patch_shape,
         normalization, augmentation,
-        dataset_class
+        dataset_class, n_classes
     )
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)

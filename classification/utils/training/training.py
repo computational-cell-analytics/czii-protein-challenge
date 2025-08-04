@@ -54,15 +54,15 @@ def get_3d_model(
 def classification_training(
     name: str,
     train_data: Tuple[
-        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray], List[Sequence]
+        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray]
     ],
     val_data: Tuple[
-        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray], List[Sequence]
+        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray]
     ],
     test_data: Tuple[
-        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray], List[Sequence]
+        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray]
     ],
-    patch_shape: Tuple[int, int, int],
+    patch_shape: int,
     batch_size: int = 1,
     lr: float = 1e-4,
     logger=ClassificationLogger,
@@ -124,6 +124,7 @@ def classification_training(
         dataset_class=dataset_class,
         n_samples_train=n_samples_train,
         n_samples_val=n_samples_val,
+        n_classes=out_channels,
     )
 
     if check:
