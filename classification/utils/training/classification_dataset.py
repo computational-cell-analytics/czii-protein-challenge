@@ -21,13 +21,12 @@ class ClassificationDataset(torch.utils.data.Dataset):
     """
     def __init__(
         self,
-        raw_data: np.ndarray,
-        peaks: Sequence[Tuple[int, int, int]],
-        max_extent: int,
+        subtomogram: Sequence[ArrayLike],
         normalization: Callable = None,
         augmentation: Callable = None,
         image_shape: Tuple[int, int, int] = None,
         n_classes: int = 2,
+        n_samples: int = None,
     ):
 
         self.normalization = normalization
@@ -35,13 +34,12 @@ class ClassificationDataset(torch.utils.data.Dataset):
         self.image_shape = image_shape
         self.n_classes = n_classes
 
-        self.data = extract_subtomograms(raw_data, peaks, max_extent)
+        self.data = subtomogram
 
-        n_samples = len(peaks)
         self.target = list(np.random.randint(0, self.n_classes, size=n_samples))
 
-        if len(peaks) != len(self.target):
-            raise ValueError(f"Length of peaks and target don't agree: {len(peaks)} != {len(self.target)}")
+        if n_samples != len(self.target):
+            raise ValueError(f"Length of data and target don't agree: {n_samples} != {len(self.target)}")
 
 
     def __len__(self):

@@ -53,16 +53,10 @@ def get_3d_model(
 
 def classification_training(
     name: str,
-    train_data: Tuple[
-        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray]
-    ],
-    val_data: Tuple[
-        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray]
-    ],
-    test_data: Tuple[
-        List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray]
-    ],
-    patch_shape: int,
+    train_data: Sequence[ArrayLike],
+    val_data: Sequence[ArrayLike],
+    test_data: Sequence[ArrayLike],
+    patch_shape: Tuple[int, int, int],
     batch_size: int = 1,
     lr: float = 1e-4,
     logger=ClassificationLogger,
@@ -85,11 +79,7 @@ def classification_training(
 
     Args:
         name: Checkpoint name.
-        train_data, val_data, test_data: Each is a 4-tuple of:
-            - raw volumes: List[np.ndarray]
-            - coordinates: List[Sequence[Tuple[int, int, int]]]
-            - labels: List[np.ndarray]
-            - label metadata: List[Sequence]
+        train_data, val_data, test_data: Each is a List of 3D subtomogram volumes: List[np.ndarray]
         patch_shape: Shape of input patch.
         batch_size: Batch size.
         lr: Learning rate.

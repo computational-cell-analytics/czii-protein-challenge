@@ -1,10 +1,15 @@
 import os
+import sys
+sys.path.append("/user/muth9/u12095/czii-protein-challenge")
 import json
 import numpy as np
 import zarr
 from glob import glob
-from typing import List, Tuple
+from typing import List, Tuple, Sequence
 from sklearn.model_selection import train_test_split
+from numpy.typing import ArrayLike
+
+from classification.data_processing.create_subtomograms import extract_subtomograms, get_max_extent
 
 
 def _train_val_test_split(names: List[str], train_ratio=0.8, val_ratio=0.1, test_ratio=0.1):
@@ -94,38 +99,65 @@ def load_peaks(json_filepath: str) -> List[Tuple[int, int, int]]:
         peaks = json.load(f)
     return [tuple(map(int, peak)) for peak in peaks]
 
+def compute_max_extent_from_all(
+    all_peaks: List[Sequence[Tuple[int, int, int]]],
+    all_heatmaps: List[np.ndarray],
+) -> Tuple[int, int, int]:
+    max_extents = [
+        get_max_extent(peaks, heatmap)
+        for peaks, heatmap in zip(all_peaks, all_heatmaps)
+    ]
+    max_extent = max(max_extents)
+    return max_extent
 
-def get_data(
-    split: str,
-    datasets: List[str],
-    train_root: str,
-    detection_root: str,
-    output_root: str,
-    n_classes: int,
-    seed: int = 42,
-    testset: bool = True
-) -> Tuple[
-    List[np.ndarray],
-    List[List[Tuple[int, int, int]]],
-    List[np.ndarray]
-]:
-    np.random.seed(seed)
-
-    paths = get_paths(split, datasets, train_root, output_root, testset)
-
-    raw_volumes = []
+def get_coords_and_heatmaps(
+    paths: List[str],
+    detection_root: str
+) -> Tuple[List[List[Tuple[int, int, int]]], List[np.ndarray]]:
     coords_all = []
     heatmaps = []
 
     for path in paths:
-        raw_volumes.append(get_volume(path))
-
         experiment_name = os.path.basename(path)
-        peaks_path = f"{detection_root}/{experiment_name}_protein_detections.json"
-        coords_all.append(load_peaks(peaks_path))
 
-        heatmap_path = f"{detection_root}/{experiment_name}_protein_detections.npy"
-        heatmaps.append(load_heatmap(heatmap_path))
+        peaks_path = os.path.join(detection_root, f"{experiment_name}_protein_detections.json")
+        coords = load_peaks(peaks_path)
+        coords_all.append(coords)
+
+        heatmap_path = os.path.join(detection_root, f"{experiment_name}_protein_detections.npy")
+        heatmap = load_heatmap(heatmap_path)
+        heatmaps.append(heatmap)
+
+    return coords_all, heatmaps
+
+def get_data(
+    paths: List[str],
+    coords_all: List[List[Tuple[int, int, int]]],
+    max_extent: int,
+    in_channels: int
+) -> Sequence[ArrayLike]:
+    """
+    Given a list of paths to tomograms, extract subtomograms using detection coordinates.
+
+    Each subtomogram will have shape (in_channels, D, H, W).
+    """
+    subtomograms = []
+
+    for path, coords in zip(paths, coords_all):
+        raw_volume = get_volume(path)  # expected shape: (D, H, W)
+        subs = extract_subtomograms(raw_volume, coords, max_extent)  # list of (D, H, W)
+
+        # Add channel dimension to each subtomogram
+        for sub in subs:
+            sub = np.expand_dims(sub, axis=0)  # shape: (1, D, H, W)
+            if in_channels == 1:
+                subtomograms.append(sub)
+            else:
+                # Repeat the single channel across in_channels
+                sub = np.repeat(sub, in_channels, axis=0)  # shape: (in_channels, D, H, W)
+                subtomograms.append(sub)
+
+    return subtomograms
 
 
-    return raw_volumes, coords_all, heatmaps
+

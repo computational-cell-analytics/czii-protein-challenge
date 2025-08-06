@@ -9,9 +9,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torch_em.data.concat_dataset import ConcatDataset
+from numpy.typing import ArrayLike
 
 from .classification_dataset import ClassificationDataset
-from ...data_processing.create_subtomograms import get_max_extent
 
 
 def samples_to_datasets(n_samples: int, n_datasets: int, split: str = "uniform") -> List[int]:
@@ -23,56 +23,44 @@ def samples_to_datasets(n_samples: int, n_datasets: int, split: str = "uniform")
     raise NotImplementedError("Balanced splitting is not implemented.")
 
 
-def compute_max_extent_from_all(
-    all_peaks: List[Sequence[Tuple[int, int, int]]],
-    all_heatmaps: List[np.ndarray],
-) -> Tuple[int, int, int]:
-    max_extents = [
-        get_max_extent(peaks, heatmap)
-        for peaks, heatmap in zip(all_peaks, all_heatmaps)
-    ]
-    max_extent = max(max_extents)
-    return max_extent
-
 
 def _load_dataset(
-    raw_data_list: List[np.ndarray],
-    peaks_list: List[Sequence[Tuple[int, int, int]]],
-    image_shape: int = None,
+    subtomogram_list: Sequence[ArrayLike],
+    image_shape: Tuple[int, int, int] = None,
     normalization: Callable = None,
     augmentation: Callable = None,
     dataset_class=ClassificationDataset,
     n_samples: Union[int, None] = None,
     n_classes: int = 2,
 ) -> torch.utils.data.Dataset:
-    assert len(raw_data_list) == len(peaks_list)
-    print(f"n_sample  {n_samples}")
-
-    n_datasets = len(raw_data_list)
-    samples_per_ds = [None] * n_datasets if n_samples is None else samples_to_datasets(n_samples, n_datasets)
-    print(f"n_datasets {n_datasets}")
+    #assert len(raw_data_list) == len(peaks_list) #TODO should I bring the targets back here??
+    n_samples = len(subtomogram_list)
+    #TODO do I need the next twp lines??
+    #n_datasets = len(raw_data_list)
+    #samples_per_ds = [None] * n_datasets if n_samples is None else samples_to_datasets(n_samples, n_datasets)
+    print(f"n_samples {n_samples}")
     datasets = []
-    for i in range(n_datasets):
+    for i in range(n_samples):
         dataset = dataset_class(
-            raw_data=raw_data_list[i],
-            peaks=peaks_list[i],
-            max_extent=image_shape,
+            subtomogram=subtomogram_list[i],
             normalization=normalization,
             augmentation=augmentation,
+            image_shape=image_shape,
             n_classes=n_classes,
+            n_samples=n_samples,
         )
         datasets.append(dataset)
-    print(f"datasets {datasets}")
+
     return datasets[0] if len(datasets) == 1 else ConcatDataset(*datasets)
 
 
 def create_data_loader(
-    train_data: Tuple[List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray], List[Sequence]],
-    val_data: Tuple[List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray], List[Sequence]],
-    test_data: Tuple[List[np.ndarray], List[Sequence[Tuple[int, int, int]]], List[np.ndarray], List[Sequence]],
+    train_data: Sequence[ArrayLike],
+    val_data: Sequence[ArrayLike],
+    test_data: Sequence[ArrayLike],
     normalization: Callable = None,
     augmentation: Callable = None,
-    patch_shape: int = None,
+    patch_shape: Tuple[int, int, int] = (32,32,32), 
     num_workers: int = 4,
     batch_size: int = 8,
     dataset_class=ClassificationDataset,
@@ -80,39 +68,33 @@ def create_data_loader(
     n_samples_val: Union[int, None] = None,
     n_classes: int = 2,
 ):
-    train_raws, train_peaks, train_heatmaps = train_data
-    val_raws, val_peaks, val_heatmaps = val_data
-    test_raws, test_peaks, test_heatmaps = test_data
-
-    # Compute max_extent over all datasets
-    all_peaks = train_peaks + val_peaks + test_peaks
-    all_heatmaps = train_heatmaps + val_heatmaps + test_heatmaps
-    max_extent = compute_max_extent_from_all(all_peaks, all_heatmaps)
-
-    # Use user-specified patch_shape if provided, else use computed max_extent
-    final_patch_shape = patch_shape if patch_shape is not None else max_extent
-
+    
     train_set = _load_dataset(
-        train_raws, train_peaks, final_patch_shape,
+        train_data, patch_shape,
         normalization, augmentation,
         dataset_class, n_samples_train, n_classes
     )
 
     val_set = _load_dataset(
-        val_raws, val_peaks, final_patch_shape,
+        val_data, patch_shape,
         normalization, augmentation,
         dataset_class, n_samples_val, n_classes
     )
 
     test_set = _load_dataset(
-        test_raws, test_peaks, final_patch_shape,
+        test_data, patch_shape,
         normalization, augmentation,
         dataset_class, n_classes
     )
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+
+
+    train_loader.shuffle = True
+    val_loader.shuffle = True
+    test_loader.shuffle = True
 
     return train_loader, val_loader, test_loader
 

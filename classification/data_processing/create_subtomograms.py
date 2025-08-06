@@ -75,27 +75,34 @@ def estimate_gaussian_extent(heatmap, coord, threshold=0.1): #TODO might want to
 
 
 def extract_subtomograms(raw_data, peaks, size, halo=4):
-    """Extract centered subtomograms from raw data."""
+    """Extract centered subtomograms from raw data with a defined size and halo.
+    
+    Ensures extracted cube is always centered and has shape (bbox_size, bbox_size, bbox_size),
+    where bbox_size = size + halo (+1 if even).
+    """
     bbox_size = size + halo
+    if bbox_size % 2 == 0:
+        bbox_size += 1  # Ensure odd size for symmetric centering
+
+    half_size = bbox_size // 2
     print(f"Using bounding box size (with halo): {bbox_size}")
 
     subtomograms = []
-    offset = size // 2
-    extra = 1 if size % 2 != 0 else 0
-    half_size = offset + halo
 
     for z, y, x in peaks:
-        zmin = max(0, z - half_size)
-        zmax = min(raw_data.shape[0], z + half_size + extra)
-        ymin = max(0, y - half_size)
-        ymax = min(raw_data.shape[1], y + half_size + extra)
-        xmin = max(0, x - half_size)
-        xmax = min(raw_data.shape[2], x + half_size + extra)
-        
-        cube = raw_data[zmin:zmax, ymin:ymax, xmin:xmax]
+        zmin = z - half_size
+        zmax = z + half_size + 1
+        ymin = y - half_size
+        ymax = y + half_size + 1
+        xmin = x - half_size
+        xmax = x + half_size + 1
 
-        #make sure that the bb is fully inside the tomogram
-        if cube.shape == (bbox_size, bbox_size, bbox_size): 
+        # Ensure bounding box is within data limits
+        if (zmin >= 0 and zmax <= raw_data.shape[0] and
+            ymin >= 0 and ymax <= raw_data.shape[1] and
+            xmin >= 0 and xmax <= raw_data.shape[2]):
+
+            cube = raw_data[zmin:zmax, ymin:ymax, xmin:xmax]
             subtomograms.append(cube)
 
     return subtomograms
