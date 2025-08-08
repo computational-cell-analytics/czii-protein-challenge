@@ -77,8 +77,9 @@ def estimate_gaussian_extent(heatmap, coord, threshold=0.1): #TODO might want to
 def extract_subtomograms(raw_data, peaks, size, halo=4):
     """Extract centered subtomograms from raw data with a defined size and halo.
     
-    Ensures extracted cube is always centered and has shape (bbox_size, bbox_size, bbox_size),
-    where bbox_size = size + halo (+1 if even).
+    Returns:
+        subtomograms: list of ndarray cubes
+        valid_coords: list of (z, y, x) coordinates for each cube
     """
     bbox_size = size + halo
     if bbox_size % 2 == 0:
@@ -88,6 +89,7 @@ def extract_subtomograms(raw_data, peaks, size, halo=4):
     print(f"Using bounding box size (with halo): {bbox_size}")
 
     subtomograms = []
+    valid_coords = []
 
     for z, y, x in peaks:
         zmin = z - half_size
@@ -104,8 +106,9 @@ def extract_subtomograms(raw_data, peaks, size, halo=4):
 
             cube = raw_data[zmin:zmax, ymin:ymax, xmin:xmax]
             subtomograms.append(cube)
+            valid_coords.append((z, y, x))
 
-    return subtomograms
+    return subtomograms, valid_coords
 
 
 def visualize_with_napari(raw_data, heatmap, peaks, subtomograms):

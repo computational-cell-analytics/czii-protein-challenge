@@ -145,7 +145,7 @@ def get_data(
 
     for path, coords in zip(paths, coords_all):
         raw_volume = get_volume(path)  # expected shape: (D, H, W)
-        subs = extract_subtomograms(raw_volume, coords, max_extent)  # list of (D, H, W)
+        subs, _ = extract_subtomograms(raw_volume, coords, max_extent)  # list of (D, H, W)
 
         # Add channel dimension to each subtomogram
         for sub in subs:
