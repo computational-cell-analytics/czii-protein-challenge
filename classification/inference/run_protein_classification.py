@@ -7,9 +7,13 @@ from tqdm import tqdm
 import numpy as np
 import json
 
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+
 from classification.training import load_heatmap, load_peaks
 from classification.data_processing import extract_subtomograms
-from classification.utils.inference import protein_classification
+from classification.utils import protein_classification
 
 
 def get_volume(input_path: str) -> np.ndarray:
@@ -21,40 +25,67 @@ def get_volume(input_path: str) -> np.ndarray:
 def run_protein_classification(input_paths, output_path: str, model_path: str, batch_size: int = 16):
     """
     Classify subtomograms from a list of .h5 files or a single file.
-    Saves results alongside predictions and probabilities.
+    Saves:
+      - classification_results.csv: Sample ID, Predicted Class, Confidence
+      - cluster_plot.png: t-SNE projection of probability vectors colored by predicted class
     """
     os.makedirs(output_path, exist_ok=True)
 
     if isinstance(input_paths, str):
         input_paths = [input_paths]
 
-    results_paths = []
+    all_sample_ids = []
+    all_preds = []
+    all_probs = []
+
     for i in range(0, len(input_paths), batch_size):
         batch_paths = input_paths[i:i + batch_size]
 
         cubes = []
+        sample_ids = []
         for path in batch_paths:
             with h5py.File(path, "r") as f:
                 cubes.append(f["raw"][:])
+            sample_ids.append(os.path.basename(path))
         cubes = np.stack(cubes, axis=0)
 
-        # Run classification
+        # Run classification — now only returns probabilities & predictions
         probs, preds = protein_classification(cubes, model_path)
 
-        # Save results for each file
-        for path, prob, pred in zip(batch_paths, probs, preds):
-            base_name = os.path.splitext(os.path.basename(path))[0]
-            out_file = os.path.join(output_path, f"{base_name}_classification.h5")
-            with h5py.File(out_file, "w") as f:
-                f.create_dataset("probabilities", data=prob)
-                f.create_dataset("predicted_class", data=np.array(pred, dtype=np.int64))
-            results_paths.append(out_file)
+        all_sample_ids.extend(sample_ids)
+        all_preds.extend(preds)
+        all_probs.extend(probs)
 
-    return results_paths
+    all_probs = np.array(all_probs)
+
+    # Save predictions list
+    df = pd.DataFrame({
+        "Sample ID": all_sample_ids,
+        "Predicted Class": all_preds,
+        "Confidence": np.max(all_probs, axis=1)
+    })
+    df_path = os.path.join(output_path, "classification_results.csv")
+    df.to_csv(df_path, index=False)
+
+    # Create and save t-SNE cluster plot from probability vectors
+    tsne = TSNE(n_components=2, random_state=42)
+    reduced = tsne.fit_transform(all_probs)
+    plt.figure(figsize=(8, 6))
+    scatter = plt.scatter(
+        reduced[:, 0], reduced[:, 1],
+        c=all_preds, cmap="tab20", alpha=0.7
+    )
+    plt.colorbar(scatter, label="Predicted Class")
+    plt.title("Protein Classification Clusters (t-SNE from Probabilities)")
+    plt.xlabel("t-SNE Dim 1")
+    plt.ylabel("t-SNE Dim 2")
+    cluster_plot_path = os.path.join(output_path, "cluster_plot.png")
+    plt.savefig(cluster_plot_path, dpi=300, bbox_inches="tight")
+    plt.close()
 
 
 def preprocess_tomo(input_tomo: str, detection_folder: str, max_extent: int, subtomo_output: str):
-    experiment_name = os.path.splitext(os.path.basename(input_tomo))[0]
+    experiment_name = os.path.basename(input_tomo)
 
     peaks_path = os.path.join(detection_folder, f"{experiment_name}_protein_detections.json")
     coords = load_peaks(peaks_path)
@@ -80,11 +111,13 @@ def preprocess_tomo(input_tomo: str, detection_folder: str, max_extent: int, sub
 
 def process_folder(args):
     if args.preprocess:
-        input_tomograms = [
+        #TODO case where multiple big tomograms:
+        '''input_tomograms = [
             os.path.join(args.input_path, name)
             for name in os.listdir(args.input_path)
             if os.path.isdir(os.path.join(args.input_path, name))
-        ]
+        ]'''
+        input_tomograms = [args.input_path]
 
         input_files = []
         for input_tomo in input_tomograms:
@@ -130,7 +163,7 @@ def main():
         help="Size of the bbox that was used during training"
     )
     parser.add_argument(
-        "--subtomo_output", type=str,
+        "--subtomo_output", "-sub_o", type=str,
         help="Where should the subtomograms be stored"
     )
 

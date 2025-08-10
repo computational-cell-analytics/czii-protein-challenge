@@ -6,6 +6,20 @@ from typing import Tuple
 import torch
 import numpy as np
 import torch_em
+from torch_em.model.resnet3d import resnet3d_18
+
+def get_model(model_path, device):
+    model = resnet3d_18(
+        in_channels=1,
+        out_channels=6
+    )
+    model_path = os.path.join(model_path, "best.pt")
+    checkpoint = torch.load(model_path, map_location=device, weights_only = False)
+    model.load_state_dict(checkpoint['model_state'])
+    model.eval()
+    model.to(device)
+
+    return model
 
 def protein_classification(
     subtomograms: np.ndarray,  # [z, y, x] or (N, z, y, x)
@@ -46,11 +60,14 @@ def protein_classification(
         warnings.simplefilter("ignore")
 
         if os.path.isdir(model_path):  # Load model from torch_em checkpoint dir
-            model = torch_em.util.load_model(checkpoint=model_path, device=device)
+            #model = torch_em.util.load_model(checkpoint=model_path, device=device)
+            model = get_model(model_path=model_path, device=device)
         else:  # Load model directly from serialized pytorch model
-            model = torch.load(model_path, map_location=device)
+            #model = torch.load(model_path, map_location=device)
+            #TODO!
+            print("not implemented yet!")
 
-    model.eval()
+    #model.eval()
 
     with torch.no_grad():
         tensor = torch.from_numpy(subtomograms).float().unsqueeze(1).to(device)  # (N, 1, D, H, W)
