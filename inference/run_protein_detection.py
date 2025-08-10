@@ -6,12 +6,9 @@ from tqdm import tqdm
 import numpy as np
 import json
 
-import sys
-sys.path.append("/user/muth9/u12095/czii-protein-challenge")
-
-from utils import get_prediction_torch_em
-from utils import protein_detection
-from utils import parse_tiling
+from utils.prediction.prediction import get_prediction_torch_em
+from utils.inference.protein_detection import protein_detection
+from utils.training.tiling_helper import parse_tiling
 
 def get_volume(input_path):
     zarr_file = zarr.open(os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"), mode='r')

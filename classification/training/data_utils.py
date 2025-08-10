@@ -1,6 +1,5 @@
 import os
-import sys
-sys.path.append("/user/muth9/u12095/czii-protein-challenge")
+
 import json
 import numpy as np
 import zarr
@@ -9,7 +8,7 @@ from typing import List, Tuple, Sequence
 from sklearn.model_selection import train_test_split
 from numpy.typing import ArrayLike
 
-from classification.data_processing.create_subtomograms import extract_subtomograms, get_max_extent
+from classification.data_processing import extract_subtomograms, get_max_extent
 
 
 def _train_val_test_split(names: List[str], train_ratio=0.8, val_ratio=0.1, test_ratio=0.1):

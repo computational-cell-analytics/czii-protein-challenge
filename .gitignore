@@ -9,3 +9,5 @@ evaluation/results/
 
 # Ignore .env files
 .env
+
+*.egg-info/

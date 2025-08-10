@@ -1,3 +1,4 @@
 from .training.data_loader import create_data_loader
 from .training.training import classification_training, ClassificationMetric
 from .training.classification_dataset import ClassificationDataset
+from .inference.protein_classification import protein_classification

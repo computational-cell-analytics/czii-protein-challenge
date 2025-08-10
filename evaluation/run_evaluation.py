@@ -2,8 +2,6 @@ import os
 import csv
 import argparse
 from tqdm import tqdm
-import sys
-sys.path.append("/user/muth9/u12095/czii-protein-challenge")
 
 import numpy as np
 import json

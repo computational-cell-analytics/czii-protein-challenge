@@ -4,7 +4,7 @@ import torch
 from numpy.typing import ArrayLike
 from skimage.transform import resize
 
-from ...data_processing.create_subtomograms import extract_subtomograms
+from classification.data_processing import extract_subtomograms
 
 
 class ClassificationDataset(torch.utils.data.Dataset):

@@ -1,15 +1,13 @@
 import os
 # from glob import glob
 import argparse
-import sys
-sys.path.append("/user/muth9/u12095/czii-protein-challenge")
 
 from utils import get_paths  # noqa
 from utils import supervised_training  # noqa
 
 TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
 LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
-OUTPUT_ROOT = "/mnt/lustre-emmy-hdd/usr/u12095/cryo-et/czii_challenge/training"
+OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
 
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):

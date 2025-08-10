@@ -1,14 +1,13 @@
 import os
-import sys
-sys.path.append("/user/muth9/u12095/czii-protein-challenge")
 
 import argparse
 import torch
 import numpy as np
 
-from classification.training.data_utils import get_paths,get_coords_and_heatmaps, compute_max_extent_from_all, get_data
 from torch_em.classification.classification_logger import ClassificationLogger
 from torch_em.classification.classification_trainer import ClassificationTrainer
+
+from classification.training import get_paths,get_coords_and_heatmaps, compute_max_extent_from_all, get_data
 from classification.utils import classification_training,ClassificationMetric,ClassificationDataset
 
 TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"

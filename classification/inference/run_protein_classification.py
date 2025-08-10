@@ -6,13 +6,10 @@ import zarr
 from tqdm import tqdm
 import numpy as np
 import json
-import sys
 
-sys.path.append("/user/muth9/u12095/czii-protein-challenge")
-
-from classification.training.data_utils import load_heatmap, load_peaks
-from classification.data_processing.create_subtomograms import extract_subtomograms
-from classification.utils.inference.protein_classification import protein_classification
+from classification.training import load_heatmap, load_peaks
+from classification.data_processing import extract_subtomograms
+from classification.utils.inference import protein_classification
 
 
 def get_volume(input_path: str) -> np.ndarray:
