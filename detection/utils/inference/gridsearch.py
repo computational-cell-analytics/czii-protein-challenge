@@ -8,7 +8,7 @@ from skimage.feature import blob_log, peak_local_max
 from ..evaluation.evaluation_metrics import metric_coords
 from ..prediction.prediction import get_prediction_torch_em
 from ..training.tiling_helper import parse_tiling
-from data_processing.create_heatmap import parse_json_files
+from detection.data_processing.create_heatmap import parse_json_files
 import numpy as np
 
 #TODO Do I want to make this more flexible??

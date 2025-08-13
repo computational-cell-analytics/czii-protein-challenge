@@ -2,8 +2,8 @@ import os
 # from glob import glob
 import argparse
 
-from utils import get_paths  # noqa
-from utils import supervised_training  # noqa
+from detection.utils import get_paths  # noqa
+from detection.utils import supervised_training  # noqa
 
 TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
 LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"

@@ -8,7 +8,7 @@ import torch
 from torch_em.util import ensure_spatial_array, ensure_tensor_with_channels, ensure_patch_shape
 from ..image import load_data
 
-from data_processing.create_heatmap import get_label
+from detection.data_processing.create_heatmap import get_label
 
 class HeatmapDataset(torch.utils.data.Dataset):
     max_sampling_attempts = 500

@@ -6,8 +6,8 @@ from tqdm import tqdm
 import numpy as np
 import json
 
-from utils import metric_coords
-from data_processing.create_heatmap import parse_json_files
+from detection.utils import metric_coords
+from detection.data_processing.create_heatmap import parse_json_files
 
 def evaluate_per_protein_type(pred_coords, label_path, model_name, input_name):
     json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
