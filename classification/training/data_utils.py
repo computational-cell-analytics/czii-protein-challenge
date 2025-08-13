@@ -129,34 +129,106 @@ def get_coords_and_heatmaps(
 
     return coords_all, heatmaps
 
+def parse_json_files(json_files):
+    """
+    Parse multiple JSON files to extract coordinates and protein names.
+
+    Parameters:
+        json_files (list of str): List of JSON file paths.
+
+    Returns:
+        list of tuples, list: Extracted coordinates and corresponding protein types.
+    """
+    coordinates = []
+    protein_types = []
+
+    for file in json_files:
+        with open(file, 'r') as f:
+            data = json.load(f)
+
+            points = data.get("points", [])
+            for point in points:
+                location = point.get("location", {})
+                x = location.get("x")
+                y = location.get("y")
+                z = location.get("z")
+                if x is not None and y is not None and z is not None:
+                    coordinates.append((z / 10, y / 10, x / 10))  # Scale coordinates as needed
+                    protein_types.append(data.get("pickable_object_name", "unknown"))
+
+    return coordinates, protein_types
+
+
+def get_coords_and_targets(paths: List[str], target_root: str) -> Tuple[List[List[Tuple[int, int, int]]], List[List[str]]]:
+    """
+    For each tomogram path, load coordinates and targets from the matching experiment folder in target_root.
+
+    Returns:
+        coords_all: list where each element is a list of integer coordinates for that tomogram
+        targets_all: list where each element is a list of protein type labels for that tomogram
+    """
+    coords_all = []
+    targets_all = []
+
+    for path in paths:
+        experiment_name = os.path.basename(path)
+        json_folder = os.path.join(target_root, experiment_name)
+        picks_folder = os.path.join(json_folder, "Picks")
+
+        # Load and parse JSONs
+        json_files = [
+            os.path.join(picks_folder, f)
+            for f in os.listdir(picks_folder)
+            if f.endswith('.json')
+        ]
+        coords, protein_types = parse_json_files(json_files)
+
+        # Convert to integers for array slicing
+        coords_int = [(int(round(x)), int(round(y)), int(round(z))) for x, y, z in coords]
+
+        coords_all.append(coords_int)
+        targets_all.append(protein_types)  # keep per-tomogram grouping
+
+    return coords_all, targets_all
+
 def get_data(
     paths: List[str],
     coords_all: List[List[Tuple[int, int, int]]],
     max_extent: int,
-    in_channels: int
-) -> Sequence[ArrayLike]:
+    in_channels: int,
+    targets: List[List[str]]
+):
     """
     Given a list of paths to tomograms, extract subtomograms using detection coordinates.
 
     Each subtomogram will have shape (in_channels, D, H, W).
     """
     subtomograms = []
+    all_filtered_targets = []
 
-    for path, coords in zip(paths, coords_all):
+    for path, coords, tomogram_targets in zip(paths, coords_all, targets):
         raw_volume = get_volume(path)  # expected shape: (D, H, W)
-        subs, _ = extract_subtomograms(raw_volume, coords, max_extent)  # list of (D, H, W)
+
+        subs, _, filtered_targets = extract_subtomograms(
+            raw_volume,
+            coords,
+            max_extent,
+            targets=tomogram_targets
+        )
 
         # Add channel dimension to each subtomogram
-        for sub in subs:
+        for sub, tgt in zip(subs, filtered_targets):
             sub = np.expand_dims(sub, axis=0)  # shape: (1, D, H, W)
             if in_channels == 1:
                 subtomograms.append(sub)
+                all_filtered_targets.append(tgt)
             else:
                 # Repeat the single channel across in_channels
                 sub = np.repeat(sub, in_channels, axis=0)  # shape: (in_channels, D, H, W)
                 subtomograms.append(sub)
+                all_filtered_targets.append(tgt)
 
-    return subtomograms
+    return subtomograms, all_filtered_targets
 
 
 

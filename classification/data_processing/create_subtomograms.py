@@ -74,12 +74,20 @@ def estimate_gaussian_extent(heatmap, coord, threshold=0.1): #TODO might want to
     return max(extent)
 
 
-def extract_subtomograms(raw_data, peaks, size, halo=4):
+def extract_subtomograms(raw_data, peaks, size, halo=4, targets=None):
     """Extract centered subtomograms from raw data with a defined size and halo.
+    
+    Args:
+        raw_data (ndarray): 3D volume from which to extract cubes.
+        peaks (list of tuples): (z, y, x) coordinates for cube centers.
+        size (int): Cube size without halo.
+        halo (int, optional): Extra padding size around cube. Default is 4.
+        targets (list, optional): Flattened list of protein types corresponding to peaks.
     
     Returns:
         subtomograms: list of ndarray cubes
         valid_coords: list of (z, y, x) coordinates for each cube
+        filtered_targets (if given): list of protein types aligned with valid_coords
     """
     bbox_size = size + halo
     if bbox_size % 2 == 0:
@@ -90,8 +98,9 @@ def extract_subtomograms(raw_data, peaks, size, halo=4):
 
     subtomograms = []
     valid_coords = []
+    filtered_targets = [] if targets is not None else None
 
-    for z, y, x in peaks:
+    for idx, (z, y, x) in enumerate(peaks):
         zmin = z - half_size
         zmax = z + half_size + 1
         ymin = y - half_size
@@ -108,7 +117,13 @@ def extract_subtomograms(raw_data, peaks, size, halo=4):
             subtomograms.append(cube)
             valid_coords.append((z, y, x))
 
-    return subtomograms, valid_coords
+            if targets is not None:
+                filtered_targets.append(targets[idx])
+
+    if targets is not None:
+        return subtomograms, valid_coords, filtered_targets
+    else:
+        return subtomograms, valid_coords
 
 
 def visualize_with_napari(raw_data, heatmap, peaks, subtomograms):

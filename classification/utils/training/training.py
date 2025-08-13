@@ -56,6 +56,9 @@ def classification_training(
     train_data: Sequence[ArrayLike],
     val_data: Sequence[ArrayLike],
     test_data: Sequence[ArrayLike],
+    train_target: List[str],   
+    val_target: List[str],     
+    test_target: Optional[List[str]],
     patch_shape: Tuple[int, int, int],
     batch_size: int = 1,
     lr: float = 1e-4,
@@ -80,6 +83,7 @@ def classification_training(
     Args:
         name: Checkpoint name.
         train_data, val_data, test_data: Each is a List of 3D subtomogram volumes: List[np.ndarray]
+        train_target, val_target, test_target: each a list of the targets. Same order than the subtomogram list.
         patch_shape: Shape of input patch.
         batch_size: Batch size.
         lr: Learning rate.
@@ -106,6 +110,9 @@ def classification_training(
         train_data=train_data,
         val_data=val_data,
         test_data=test_data,
+        train_target=train_target,
+        val_target=val_target,
+        test_target=test_target,
         normalization=normalization,
         augmentation=augmentations,
         patch_shape=patch_shape,
