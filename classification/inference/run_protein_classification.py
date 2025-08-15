@@ -1,180 +1,163 @@
 import argparse
 import os
-import glob
 import h5py
 import zarr
 from tqdm import tqdm
 import numpy as np
-import json
-
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
-from classification.training import load_heatmap, load_peaks
+from typing import List, Tuple
+
 from classification.data_processing import extract_subtomograms
 from classification.utils import protein_classification
+from classification.training import get_coords_and_targets
 
 
 def get_volume(input_path: str) -> np.ndarray:
-    zarr_file = zarr.open(os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"), mode='r')
-    input_volume = zarr_file[:]
-    return input_volume
+    """Load a denoised tomogram from a zarr file."""
+    zarr_file = zarr.open(
+        os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"),
+        mode='r'
+    )
+    return zarr_file[:]
 
 
-def run_protein_classification(input_paths, output_path: str, model_path: str, batch_size: int = 16):
+def preprocess_tomo_with_labels(
+    tomo_paths: List[str],
+    labels_root: str,
+    max_extent: int,
+    subtomo_output: str
+) -> Tuple[List[str], List[str]]:
     """
-    Classify subtomograms from a list of .h5 files or a single file.
-    Saves:
-      - classification_results.csv: Sample ID, Predicted Class, Confidence
-      - cluster_plot.png: t-SNE projection of probability vectors colored by predicted class
+    Extract subtomograms at labeled coordinates and save them as .h5 files.
+
+    Returns:
+        file_paths: list of .h5 file paths
+        labels: list of corresponding ground-truth labels (one per file)
     """
+    coords_all, targets_all = get_coords_and_targets(tomo_paths, labels_root)
+    os.makedirs(subtomo_output, exist_ok=True)
+
+    file_paths = []
+    labels = []
+
+    for tomo_path, coords, targets in zip(tomo_paths, coords_all, targets_all):
+        experiment_name = os.path.basename(tomo_path)
+        raw_volume = get_volume(tomo_path)
+
+        subtomograms, valid_coords, targets = extract_subtomograms(raw_volume, coords, max_extent, targets=targets)
+
+        for cube, (x, y, z), target in zip(subtomograms, valid_coords, targets):
+            filename = f"{experiment_name}_x{x}_y{y}_z{z}.h5"
+            filepath = os.path.join(subtomo_output, filename)
+
+            with h5py.File(filepath, "w") as f:
+                f.create_dataset("raw", data=cube, compression="lzf")
+
+            file_paths.append(filepath)
+            labels.append(target)
+
+    return file_paths, labels
+
+
+
+
+def run_protein_classification_with_labels(
+    input_files,
+    labels,
+    output_path,
+    model_path,
+    batch_size=16
+):
     os.makedirs(output_path, exist_ok=True)
 
-    if isinstance(input_paths, str):
-        input_paths = [input_paths]
+    all_sample_ids, all_preds, all_probs, all_truths = [], [], [], []
 
-    all_sample_ids = []
-    all_preds = []
-    all_probs = []
+    # Batch processing
+    for i in range(0, len(input_files), batch_size):
+        batch_paths = input_files[i:i + batch_size]
+        cubes, sample_ids, truths_batch = [], [], []
 
-    for i in range(0, len(input_paths), batch_size):
-        batch_paths = input_paths[i:i + batch_size]
-
-        cubes = []
-        sample_ids = []
-        for path in batch_paths:
+        for path, label in zip(batch_paths, labels[i:i + batch_size]):
             with h5py.File(path, "r") as f:
                 cubes.append(f["raw"][:])
             sample_ids.append(os.path.basename(path))
-        cubes = np.stack(cubes, axis=0)
+            truths_batch.append(label)
 
-        # Run classification — now only returns probabilities & predictions
+        cubes = np.stack(cubes, axis=0)
         probs, preds = protein_classification(cubes, model_path)
 
         all_sample_ids.extend(sample_ids)
         all_preds.extend(preds)
-        all_probs.extend(probs)
+        all_probs.extend(probs.tolist())
+        all_truths.extend(truths_batch)
 
-    all_probs = np.array(all_probs)
+    #TODO get the int prediction to label part
+    
+    #TODO save results as confusion matrix
 
-    # Save predictions list
-    df = pd.DataFrame({
-        "Sample ID": all_sample_ids,
-        "Predicted Class": all_preds,
-        "Confidence": np.max(all_probs, axis=1)
-    })
-    df_path = os.path.join(output_path, "classification_results.csv")
-    df.to_csv(df_path, index=False)
+    #TODO save results as list
 
-    # Create and save t-SNE cluster plot from probability vectors
-    tsne = TSNE(n_components=2, random_state=42)
-    reduced = tsne.fit_transform(all_probs)
-    plt.figure(figsize=(8, 6))
-    scatter = plt.scatter(
-        reduced[:, 0], reduced[:, 1],
-        c=all_preds, cmap="tab20", alpha=0.7
-    )
-    plt.colorbar(scatter, label="Predicted Class")
-    plt.title("Protein Classification Clusters (t-SNE from Probabilities)")
-    plt.xlabel("t-SNE Dim 1")
-    plt.ylabel("t-SNE Dim 2")
-    cluster_plot_path = os.path.join(output_path, "cluster_plot.png")
-    plt.savefig(cluster_plot_path, dpi=300, bbox_inches="tight")
-    plt.close()
+    #TODO save results as scatter plot
 
-
-def preprocess_tomo(input_tomo: str, detection_folder: str, max_extent: int, subtomo_output: str):
-    experiment_name = os.path.basename(input_tomo)
-
-    peaks_path = os.path.join(detection_folder, f"{experiment_name}_protein_detections.json")
-    coords = load_peaks(peaks_path)
-
-    raw_volume = get_volume(input_tomo)
-
-    subtomograms, valid_coords = extract_subtomograms(raw_volume, coords, max_extent)
-
-    file_paths = []
-    os.makedirs(subtomo_output, exist_ok=True)
-
-    for cube, (z, y, x) in zip(subtomograms, valid_coords):
-        filename = f"{experiment_name}_z{z}_y{y}_x{x}.h5"
-        filepath = os.path.join(subtomo_output, filename)
-
-        with h5py.File(filepath, "w") as f:
-            f.create_dataset("raw", data=cube, compression="lzf")
-
-        file_paths.append(filepath)
-
-    return file_paths
-
-
-def process_folder(args):
-    if args.preprocess:
-        #TODO case where multiple big tomograms:
-        '''input_tomograms = [
-            os.path.join(args.input_path, name)
-            for name in os.listdir(args.input_path)
-            if os.path.isdir(os.path.join(args.input_path, name))
-        ]'''
-        input_tomograms = [args.input_path]
-
-        input_files = []
-        for input_tomo in input_tomograms:
-            paths = preprocess_tomo(
-                input_tomo, args.detection, args.max_extent, args.subtomo_output
-            )
-            input_files.extend(paths)  # Flatten list
-    else:
-        input_files = glob.glob(os.path.join(args.input_path, '**', '*.h5'), recursive=True)
-
-    tqdm.write(f"Found {len(input_files)} subtomograms to classify.")
-    run_protein_classification(input_files, args.output_path, args.model_path)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Segment vesicles in EM tomograms.")
+    parser = argparse.ArgumentParser(description="Protein classification with ground truth labels.")
     parser.add_argument(
         "--input_path", "-i", required=True, type=str,
-        help="The filepath to the zarr file or the directory containing the tomogram data."
+        help="Path to tomogram directory or single tomogram folder."
     )
     parser.add_argument(
-        "--multiple", "-mpl", action="store_true",
-        help="Input path is a directory of multiple files or a full tomogram that is used to extract MULTIPLE subtomograms."
+        "--labels_root", "-l", required=True, type=str,
+        help="Root directory containing label JSON files."
     )
     parser.add_argument(
         "--output_path", "-o", required=True, type=str,
-        help="The filepath to directory where the output will be saved."
+        help="Directory where results will be saved."
     )
     parser.add_argument(
         "--model_path", "-m", required=True, type=str,
-        help="The filepath to the model."
+        help="Path to trained model."
     )
     parser.add_argument(
-        "--preprocess", action="store_true",
-        help="Set to true if the input is a tomogram, not the subtomograms, and the tomogram needs preprocessing before the classification."
+        "--max_extent", type=int, required=True,
+        help="Size of the bounding box used during training."
     )
     parser.add_argument(
-        "--detection", "-d", type=str,
-        help="If the input is a full tomogram, not the subtomograms, the directory of the heatmap and the lists of the coordinates is needed."
+        "--subtomo_output", "-sub_o", required=True, type=str,
+        help="Where to store intermediate subtomogram .h5 files."
     )
     parser.add_argument(
-        "--max_extent", type=int,
-        help="Size of the bbox that was used during training"
-    )
-    parser.add_argument(
-        "--subtomo_output", "-sub_o", type=str,
-        help="Where should the subtomograms be stored"
+        "--batch_size", "-b", type=int, default=16,
+        help="Batch size for classification."
     )
 
     args = parser.parse_args()
 
-    if args.multiple:
-        process_folder(args)
-    else:
-        run_protein_classification(args.input_path, args.output_path, args.model_path)
+    tomo_paths = [args.input_path]
 
-    print("Finished classification!")
+    print("Extracting subtomograms with labels...")
+    subtomo_files, labels = preprocess_tomo_with_labels(
+        tomo_paths,
+        args.labels_root,
+        args.max_extent,
+        args.subtomo_output
+    )
+
+    print(f"Classifying {len(subtomo_files)} subtomograms...")
+    run_protein_classification_with_labels(
+        subtomo_files,
+        labels,
+        args.output_path,
+        args.model_path,
+        batch_size=args.batch_size
+    )
+
+    print("Finished classification with label evaluation!")
 
 
 if __name__ == "__main__":

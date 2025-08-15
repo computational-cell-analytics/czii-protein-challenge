@@ -15,6 +15,7 @@ from .data_loader import create_data_loader
 from .classification_dataset import ClassificationDataset
 
 from torch_em.model.resnet3d import resnet3d_18
+from sklearn.preprocessing import LabelEncoder
 
 class ClassificationMetric:
     """Metric for classification training.
@@ -103,6 +104,18 @@ def classification_training(
         dataset_class: Dataset wrapper class.
         kwargs: Additional args for trainer.
     """
+    # --- Encode string labels to integers ---
+    all_labels = train_target + val_target
+    encoder = LabelEncoder()
+    encoder.fit(all_labels)
+
+    train_target_int = encoder.transform(train_target)
+    val_target_int = encoder.transform(val_target)
+    test_target_int = encoder.transform(test_target) if test_target is not None else None
+
+    # Store mapping for later decoding
+    idx_to_label = {i: label for i, label in enumerate(encoder.classes_)}
+
     num_workers = 6  #TODO using this in location training as well, check if it should be different
 
     #TODO actually get the test_loader and store the data from it as subtomograms somewhere, is this possible?
@@ -110,9 +123,9 @@ def classification_training(
         train_data=train_data,
         val_data=val_data,
         test_data=test_data,
-        train_target=train_target,
-        val_target=val_target,
-        test_target=test_target,
+        train_target=train_target_int,
+        val_target=val_target_int,
+        test_target=test_target_int,
         normalization=normalization,
         augmentation=augmentations,
         patch_shape=patch_shape,
@@ -155,4 +168,6 @@ def classification_training(
     )
 
     trainer.fit(n_iterations)
+
+    return idx_to_label
 

@@ -3,6 +3,7 @@ import os
 import argparse
 import torch
 import numpy as np
+import json
 
 from torch_em.classification.classification_logger import ClassificationLogger
 from torch_em.classification.classification_trainer import ClassificationTrainer
@@ -31,7 +32,7 @@ def train(testset=True):
     in_channels=1
     n_classes = 6
     datasets = ["ExperimentRuns"]
-    model_name = "protein_classification_czii_v2"
+    model_name = "protein_classification_czii_v3"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -59,7 +60,7 @@ def train(testset=True):
     patch_shape = (max_extent+halo, max_extent+halo, max_extent+halo)
     
 
-    classification_training(
+    idx_to_label = classification_training(
         name=model_name,
         train_data=train_data,
         val_data=val_data,
@@ -72,7 +73,7 @@ def train(testset=True):
         lr=1e-4,
         logger=ClassificationLogger,
         trainer_class=ClassificationTrainer,
-        n_iterations=1e5,
+        n_iterations=1e4,
         out_channels=n_classes,
         in_channels=in_channels,
         loss=torch.nn.CrossEntropyLoss(),
@@ -81,7 +82,11 @@ def train(testset=True):
         normalization=None,
         save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
         dataset_class=ClassificationDataset,
-)
+    )
+
+    mapping_file = os.path.join(output_path, "idx_to_label.json")
+    with open(mapping_file, "w") as f:
+        json.dump(idx_to_label, f)
 
 
 
