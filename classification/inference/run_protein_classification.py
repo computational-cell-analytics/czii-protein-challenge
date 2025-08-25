@@ -2,12 +2,14 @@ import argparse
 import os
 import h5py
 import zarr
+import json
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+import seaborn as sns
 
 from typing import List, Tuple
 
@@ -74,6 +76,10 @@ def run_protein_classification_with_labels(
 ):
     os.makedirs(output_path, exist_ok=True)
 
+    # Load int→label mapping
+    with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v3/idx_to_label.json", "r") as f:
+        idx_to_label = json.load(f)
+
     all_sample_ids, all_preds, all_probs, all_truths = [], [], [], []
 
     # Batch processing
@@ -95,13 +101,48 @@ def run_protein_classification_with_labels(
         all_probs.extend(probs.tolist())
         all_truths.extend(truths_batch)
 
-    #TODO get the int prediction to label part
-    
-    #TODO save results as confusion matrix
+    # --- Convert int preds to labels ---
+    all_pred_labels = [idx_to_label[str(p)] for p in all_preds]
+    all_truth_labels = [idx_to_label[str(t)] if str(t) in idx_to_label else t for t in all_truths]
 
-    #TODO save results as list
+    # --- Save confusion matrix ---
+    cm = confusion_matrix(all_truth_labels, all_pred_labels, labels=list(idx_to_label.values()))
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt="d", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues")
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title("Confusion Matrix")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, "confusion_matrix.png"))
+    plt.close()
 
-    #TODO save results as scatter plot
+    # --- Save results as list (CSV) ---
+    results_df = pd.DataFrame({
+        "sample_id": all_sample_ids,
+        "truth": all_truth_labels,
+        "prediction": all_pred_labels
+    })
+    results_df.to_csv(os.path.join(output_path, "classification_results.csv"), index=False)
+
+    # --- Save scatter plot of embeddings (t-SNE of probs) ---
+    tsne = TSNE(n_components=2, random_state=42)
+    probs_2d = tsne.fit_transform(np.array(all_probs))
+
+    plt.figure(figsize=(8, 6))
+    for label in set(all_truth_labels):
+        mask = np.array(all_truth_labels) == label
+        plt.scatter(probs_2d[mask, 0], probs_2d[mask, 1], label=label, alpha=0.6)
+
+    plt.legend()
+    plt.title("t-SNE of classification probabilities")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, "tsne_scatter.png"))
+    plt.close()
+
+    # --- Save classification report ---
+    report = classification_report(all_truth_labels, all_pred_labels, labels=list(idx_to_label.values()))
+    with open(os.path.join(output_path, "classification_report.txt"), "w") as f:
+        f.write(report)
 
 
 
