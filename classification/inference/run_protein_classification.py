@@ -94,7 +94,7 @@ def run_protein_classification_with_labels(
             truths_batch.append(label)
 
         cubes = np.stack(cubes, axis=0)
-        probs, preds = protein_classification(cubes, model_path)
+        probs, preds = protein_classification(cubes, model_path, EfficientNet=False)
 
         all_sample_ids.extend(sample_ids)
         all_preds.extend(preds)

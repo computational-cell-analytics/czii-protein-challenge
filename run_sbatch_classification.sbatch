@@ -9,9 +9,9 @@
 
 
 /scratch/usr/nimsmuth/mambaforge/envs/synapse-net/bin/python /user/muth9/u12095/czii-protein-challenge/classification/inference/run_protein_classification.py \
- -i /scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/ExperimentRuns/TS_5_4 \
- -o /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/classification/protein_classification_czii_v6/p_64 \
- -m /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models/checkpoints/protein_classification_czii_v6/ \
- --max_extent 64 \
- -sub_o /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/classification/protein_classification_czii_v6/p_64/subtomograms \
+ -i /scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/ExperimentRuns/TS_73_6 \
+ -o /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/classification/protein_classification_czii_v4 \
+ -m /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models/checkpoints/protein_classification_czii_v4/ \
+ --max_extent 35 \
+ -sub_o /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/classification/protein_classification_czii_v4/subtomograms \
  -l /scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/ExperimentRuns/

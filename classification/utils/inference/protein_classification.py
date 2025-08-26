@@ -7,7 +7,7 @@ import torch
 import numpy as np
 import torch_em
 from torch_em.model.resnet3d import resnet3d_18
-
+from torch_em.transform.raw import normalize
 
 def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
     """
@@ -51,7 +51,7 @@ def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
     return subtomograms_padded
 
 
-def get_model(model_path, device, EfficientNet=True):
+def get_model(model_path, device, EfficientNet=False):
     if EfficientNet:
         from efficientnet_pytorch_3d import EfficientNet3D
         model = EfficientNet3D.from_name("efficientnet-b0", override_params={'num_classes': 6}, in_channels=1)
@@ -73,6 +73,7 @@ def protein_classification(
     model_path: str = None,
     verbose: bool = True,
     device: str = None,
+    EfficientNet: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Classify one or more subtomograms.
@@ -96,8 +97,13 @@ def protein_classification(
     if subtomograms.ndim == 3:  # single cube
         subtomograms = np.expand_dims(subtomograms, axis=0)
 
-    #pad is the subtomograms dimensions are too small (<64x64x64) 
-    subtomograms = pad_to_patch(subtomograms)
+    if EfficientNet:
+        #pad is the subtomograms dimensions are too small (<64x64x64) 
+        subtomograms = pad_to_patch(subtomograms)
+
+    #normalise
+    subtomograms = np.stack([normalize(st) for st in subtomograms])
+
 
     t0 = time.time()
 
@@ -111,7 +117,7 @@ def protein_classification(
 
         if os.path.isdir(model_path):  # Load model from torch_em checkpoint dir
             #model = torch_em.util.load_model(checkpoint=model_path, device=device)
-            model = get_model(model_path=model_path, device=device)
+            model = get_model(model_path=model_path, device=device, EfficientNet=EfficientNet)
         else:  # Load model directly from serialized pytorch model
             #model = torch.load(model_path, map_location=device)
             #TODO!
