@@ -17,22 +17,19 @@ TARGET_ROOT ="/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/over
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
 
-# Dummy functions for augmentation and normalization #TODO!!!!!!!!!!
-def dummy_augmentation(volume: np.ndarray) -> np.ndarray:
-    return volume
+def get_augmentation():
+    from torch_em.transform.augmentation import get_augmentations
+    return get_augmentations(ndim=3)
 
-
-def dummy_normalization(volume: np.ndarray) -> np.ndarray:
-    volume = volume.astype(np.float32)
-    return (volume - np.min(volume)) / (np.max(volume) - np.min(volume) + 1e-8)
-
-
+def get_normalization():
+    from torch_em.transform.raw import normalize
+    return normalize
 
 def train(testset=True):
     in_channels=1
     n_classes = 6
     datasets = ["ExperimentRuns"]
-    model_name = "protein_classification_czii_v3"
+    model_name = "protein_classification_czii_v6"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -45,7 +42,7 @@ def train(testset=True):
     val_coords, val_target = get_coords_and_targets(val_paths, target_root=TARGET_ROOT)
     test_coords, test_target = get_coords_and_targets(test_paths, target_root=TARGET_ROOT) if testset else (None, None)
 
-    max_extent=39 #TODO check what is the biggest size from czi data/ simulation
+    max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39
 
     print(f"max_extent {max_extent}")
 
@@ -57,7 +54,7 @@ def train(testset=True):
 
     #TODO make this more automatic
     halo=4
-    patch_shape = (max_extent+halo, max_extent+halo, max_extent+halo)
+    patch_shape = (64, 64, 64)
     
 
     idx_to_label = classification_training(
@@ -73,13 +70,13 @@ def train(testset=True):
         lr=1e-4,
         logger=ClassificationLogger,
         trainer_class=ClassificationTrainer,
-        n_iterations=1e4,
+        n_iterations=5e3,
         out_channels=n_classes,
         in_channels=in_channels,
         loss=torch.nn.CrossEntropyLoss(),
         metric=ClassificationMetric(),
-        augmentations=None,
-        normalization=None,
+        augmentations=None, #get_augmentation(),
+        normalization=None, #get_normalization(),
         save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
         dataset_class=ClassificationDataset,
     )

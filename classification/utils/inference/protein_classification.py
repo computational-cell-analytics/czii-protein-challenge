@@ -8,11 +8,58 @@ import numpy as np
 import torch_em
 from torch_em.model.resnet3d import resnet3d_18
 
-def get_model(model_path, device):
-    model = resnet3d_18(
-        in_channels=1,
-        out_channels=6
+
+def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
+    """
+    Pad subtomograms so they have at least the given patch_shape.
+    
+    Args:
+        subtomograms (np.ndarray): shape (N, D, H, W) or (D, H, W)
+        patch_shape (tuple): target minimal shape (D, H, W)
+    
+    Returns:
+        np.ndarray: padded subtomograms with shape (N, D', H', W'),
+                    where each dim D' >= patch_shape[0], etc.
+    """
+    # Ensure batch dimension
+    if subtomograms.ndim == 3:
+        subtomograms = np.expand_dims(subtomograms, axis=0)
+
+    N, D, H, W = subtomograms.shape
+    target_D, target_H, target_W = patch_shape
+
+    # Compute padding for each dimension
+    pad_d = max(0, target_D - D)
+    pad_h = max(0, target_H - H)
+    pad_w = max(0, target_W - W)
+
+    # Split padding equally left/right (extra goes to the right)
+    pad_before_d, pad_after_d = pad_d // 2, pad_d - pad_d // 2
+    pad_before_h, pad_after_h = pad_h // 2, pad_h - pad_h // 2
+    pad_before_w, pad_after_w = pad_w // 2, pad_w - pad_w // 2
+
+    padding = (
+        (0, 0),  # batch dim, no padding
+        (pad_before_d, pad_after_d),
+        (pad_before_h, pad_after_h),
+        (pad_before_w, pad_after_w)
     )
+
+    # Apply padding (0 padding atm, #TODO do a different one?)
+    subtomograms_padded = np.pad(subtomograms, padding, mode="constant", constant_values=0)
+
+    return subtomograms_padded
+
+
+def get_model(model_path, device, EfficientNet=True):
+    if EfficientNet:
+        from efficientnet_pytorch_3d import EfficientNet3D
+        model = EfficientNet3D.from_name("efficientnet-b0", override_params={'num_classes': 6}, in_channels=1)
+    else:
+        model = resnet3d_18(
+            in_channels=1,
+            out_channels=6
+        )
     model_path = os.path.join(model_path, "best.pt")
     checkpoint = torch.load(model_path, map_location=device, weights_only = False)
     model.load_state_dict(checkpoint['model_state'])
@@ -48,6 +95,9 @@ def protein_classification(
 
     if subtomograms.ndim == 3:  # single cube
         subtomograms = np.expand_dims(subtomograms, axis=0)
+
+    #pad is the subtomograms dimensions are too small (<64x64x64) 
+    subtomograms = pad_to_patch(subtomograms)
 
     t0 = time.time()
 

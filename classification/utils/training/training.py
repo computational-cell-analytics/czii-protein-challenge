@@ -37,18 +37,24 @@ class ClassificationMetric:
 
 
 def get_3d_model(
+    EfficientNet: True,
     in_channels: int,
     out_channels: int,
 ) -> torch.nn.Module:
-    """Get the 3D ResNet model.
+    """Get the 3D model. ResNet or EfficientNet
 
     Args:
         in_channels: Number of input channels.
         out_channels: Number of output channels (i.e., number of classes).
     """
-    # TODO: Implement EfficientNet 
-    #TODO add more arguments?
-    model = resnet3d_18(in_channels=in_channels, out_channels=out_channels)
+
+    if EfficientNet:
+        from efficientnet_pytorch_3d import EfficientNet3D
+        model = EfficientNet3D.from_name("efficientnet-b0", override_params={'num_classes': out_channels}, in_channels=in_channels)
+    else:
+        #TODO add more arguments?
+        model = resnet3d_18(in_channels=in_channels, out_channels=out_channels)
+
     return model
 
 
@@ -144,7 +150,7 @@ def classification_training(
         check_loader(val_loader, n_samples=4)
         return
 
-    model = get_3d_model(in_channels=in_channels, out_channels=out_channels)
+    model = get_3d_model(EfficientNet=True,in_channels=in_channels, out_channels=out_channels)
 
     # Set the default loss and metric (if no values where passed).
     loss = torch.nn.CrossEntropyLoss() if loss is None else loss
