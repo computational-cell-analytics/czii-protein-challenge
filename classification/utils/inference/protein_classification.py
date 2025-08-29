@@ -53,7 +53,7 @@ def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
 
 def get_model(model_path, device, EfficientNet=False):
     if EfficientNet:
-        from efficientnet_pytorch_3d import EfficientNet3D
+        from external.efficientnet3d.efficientnet_pytorch_3d import EfficientNet3D
         model = EfficientNet3D.from_name("efficientnet-b0", override_params={'num_classes': 6}, in_channels=1)
     else:
         model = resnet3d_18(
@@ -97,12 +97,12 @@ def protein_classification(
     if subtomograms.ndim == 3:  # single cube
         subtomograms = np.expand_dims(subtomograms, axis=0)
 
-    if EfficientNet:
+    #if EfficientNet:
         #pad is the subtomograms dimensions are too small (<64x64x64) 
-        subtomograms = pad_to_patch(subtomograms)
+        #subtomograms = pad_to_patch(subtomograms)
 
     #normalise
-    subtomograms = np.stack([normalize(st) for st in subtomograms])
+    #subtomograms = np.stack([normalize(st) for st in subtomograms])
 
 
     t0 = time.time()

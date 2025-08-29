@@ -29,7 +29,7 @@ def train(testset=True):
     in_channels=1
     n_classes = 6
     datasets = ["ExperimentRuns"]
-    model_name = "protein_classification_czii_v6"
+    model_name = "protein_classification_czii_v8"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -42,7 +42,7 @@ def train(testset=True):
     val_coords, val_target = get_coords_and_targets(val_paths, target_root=TARGET_ROOT)
     test_coords, test_target = get_coords_and_targets(test_paths, target_root=TARGET_ROOT) if testset else (None, None)
 
-    max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39
+    max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39 or was it 35??
 
     print(f"max_extent {max_extent}")
 
@@ -54,7 +54,7 @@ def train(testset=True):
 
     #TODO make this more automatic
     halo=4
-    patch_shape = (64, 64, 64)
+    patch_shape = (max_extent+halo, max_extent+halo, max_extent+halo)
     
 
     idx_to_label = classification_training(
@@ -75,7 +75,7 @@ def train(testset=True):
         in_channels=in_channels,
         loss=torch.nn.CrossEntropyLoss(),
         metric=ClassificationMetric(),
-        augmentations=None, #get_augmentation(),
+        augmentations=get_augmentation(), #get_augmentation(),
         normalization=None, #get_normalization(),
         save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
         dataset_class=ClassificationDataset,

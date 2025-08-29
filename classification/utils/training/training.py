@@ -49,7 +49,7 @@ def get_3d_model(
     """
 
     if EfficientNet:
-        from efficientnet_pytorch_3d import EfficientNet3D
+        from external.efficientnet3d.efficientnet_pytorch_3d import EfficientNet3D
         model = EfficientNet3D.from_name("efficientnet-b0", override_params={'num_classes': out_channels}, in_channels=in_channels)
     else:
         #TODO add more arguments?
