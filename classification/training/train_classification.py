@@ -11,11 +11,17 @@ from torch_em.classification.classification_trainer import ClassificationTrainer
 from classification.training import get_paths, get_coords_and_targets, get_data
 from classification.utils import classification_training,ClassificationMetric,ClassificationDataset
 
+#EXPERIMENTAL DATA
+'''
 TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
 DETECTION_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/detections/protein_detection_czii_v4/for_classification/protein_detection_czii_v4/"
 TARGET_ROOT ="/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/ExperimentRuns/"
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
-
+'''
+#SYNTHETIC DATA
+TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/synthetic_challenge_data/static_4/"
+TARGET_ROOT ="/scratch-grete/projects/nim00007/cryo-et/synthetic_challenge_data/overlay_4/ExperimentRuns/"
+OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
 def get_augmentation():
     from torch_em.transform.augmentation import get_augmentations
@@ -28,8 +34,9 @@ def get_normalization():
 def train(testset=True):
     in_channels=1
     n_classes = 6
-    datasets = ["ExperimentRuns"]
-    model_name = "protein_classification_czii_v8"
+    zarr_ = False
+    datasets = ["ExperimentRuns_faket"]
+    model_name = "protein_classification_czii_v10"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -43,14 +50,14 @@ def train(testset=True):
     test_coords, test_target = get_coords_and_targets(test_paths, target_root=TARGET_ROOT) if testset else (None, None)
 
     max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39 or was it 35??
-
+    
     print(f"max_extent {max_extent}")
 
     # Now extract subtomograms
     #TODO can I include the augmentation with the coordinate being slightly off in get_data???
-    train_data, train_target = get_data(train_paths, train_coords, max_extent, in_channels=in_channels, targets=train_target)
-    val_data, val_target = get_data(val_paths, val_coords, max_extent, in_channels=in_channels, targets = val_target)
-    test_data, test_target = get_data(test_paths, test_coords, max_extent, in_channels=in_channels, targets=test_target) if testset else None
+    train_data, train_target = get_data(train_paths, train_coords, max_extent, in_channels=in_channels, targets=train_target, zarr_=zarr_)
+    val_data, val_target = get_data(val_paths, val_coords, max_extent, in_channels=in_channels, targets = val_target, zarr_=zarr_)
+    test_data, test_target = get_data(test_paths, test_coords, max_extent, in_channels=in_channels, targets=test_target, zarr_=zarr_) if testset else None
 
     #TODO make this more automatic
     halo=4

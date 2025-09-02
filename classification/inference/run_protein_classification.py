@@ -18,13 +18,38 @@ from classification.utils import protein_classification
 from classification.training import get_coords_and_targets
 
 
-def get_volume(input_path: str) -> np.ndarray:
-    """Load a denoised tomogram from a zarr file."""
-    zarr_file = zarr.open(
-        os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"),
-        mode='r'
-    )
-    return zarr_file[:]
+def get_non_zarr(input_path):
+    #TODO expand for other file types
+
+    import mrcfile
+
+    # Look for .mrc files in the directory
+    mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
+    
+    if not mrc_files:
+        raise FileNotFoundError(f"No .mrc file found in {input_path}")
+    if len(mrc_files) > 1:
+        raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
+    
+    # Get the single .mrc file
+    mrc_path = os.path.join(input_path, mrc_files[0])
+
+    # Open MRC file
+    with mrcfile.open(mrc_path, permissive=True) as mrc:
+        input_volume = mrc.data  
+
+    return input_volume
+
+def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
+    if zarr_:
+        zarr_path = os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0")
+        zarr_file = zarr.open(zarr_path, mode="r")
+        volume = zarr_file[:]
+    else:
+        volume = get_non_zarr(input_path)
+
+    return volume
+
 
 
 def preprocess_tomo_with_labels(
@@ -48,7 +73,7 @@ def preprocess_tomo_with_labels(
 
     for tomo_path, coords, targets in zip(tomo_paths, coords_all, targets_all):
         experiment_name = os.path.basename(tomo_path)
-        raw_volume = get_volume(tomo_path)
+        raw_volume = get_volume(tomo_path, zarr_=True)
 
         subtomograms, valid_coords, targets = extract_subtomograms(raw_volume, coords, max_extent, targets=targets)
 
@@ -72,6 +97,7 @@ def run_protein_classification_with_labels(
     labels,
     output_path,
     model_path,
+    tomo_name,
     batch_size=16
 ):
     os.makedirs(output_path, exist_ok=True)
@@ -94,7 +120,7 @@ def run_protein_classification_with_labels(
             truths_batch.append(label)
 
         cubes = np.stack(cubes, axis=0)
-        probs, preds = protein_classification(cubes, model_path, EfficientNet=True)
+        probs, preds = protein_classification(cubes, model_path, EfficientNet=False)
 
         all_sample_ids.extend(sample_ids)
         all_preds.extend(preds)
@@ -113,7 +139,7 @@ def run_protein_classification_with_labels(
     plt.ylabel("True")
     plt.title("Confusion Matrix")
     plt.tight_layout()
-    plt.savefig(os.path.join(output_path, "confusion_matrix.png"))
+    plt.savefig(os.path.join(output_path, f"confusion_matrix_{tomo_name}.png"))
     plt.close()
 
     # --- Save results as list (CSV) ---
@@ -122,7 +148,7 @@ def run_protein_classification_with_labels(
         "truth": all_truth_labels,
         "prediction": all_pred_labels
     })
-    results_df.to_csv(os.path.join(output_path, "classification_results.csv"), index=False)
+    results_df.to_csv(os.path.join(output_path, f"classification_results_{tomo_name}.csv"), index=False)
 
     # --- Save scatter plot of embeddings (t-SNE of probs) ---
     tsne = TSNE(n_components=2, random_state=42)
@@ -136,12 +162,12 @@ def run_protein_classification_with_labels(
     plt.legend()
     plt.title("t-SNE of classification probabilities")
     plt.tight_layout()
-    plt.savefig(os.path.join(output_path, "tsne_scatter.png"))
+    plt.savefig(os.path.join(output_path, f"tsne_scatter_{tomo_name}.png"))
     plt.close()
 
     # --- Save classification report ---
     report = classification_report(all_truth_labels, all_pred_labels, labels=list(idx_to_label.values()))
-    with open(os.path.join(output_path, "classification_report.txt"), "w") as f:
+    with open(os.path.join(output_path, f"classification_report_{tomo_name}.txt"), "w") as f:
         f.write(report)
 
 
@@ -176,27 +202,62 @@ def main():
         "--batch_size", "-b", type=int, default=16,
         help="Batch size for classification."
     )
+    parser.add_argument(
+        "--multiple", "-mlp", action="store_true",
+        help="Activate when input_path contains multiple directories for inference."
+    )
+
 
     args = parser.parse_args()
+    
+    if args.multiple:
+        # Iterate over all subfolders in the input path
+        for subfolder in os.listdir(args.input_path):
+            subfolder_path = os.path.join(args.input_path, subfolder)
+            if os.path.isdir(subfolder_path):
+                tomo_paths = [subfolder_path]
 
-    tomo_paths = [args.input_path]
+                print(f"Extracting subtomograms with labels from {subfolder}...")
+                subtomo_files, labels = preprocess_tomo_with_labels(
+                    tomo_paths,
+                    args.labels_root,
+                    args.max_extent,
+                    args.subtomo_output
+                )
 
-    print("Extracting subtomograms with labels...")
-    subtomo_files, labels = preprocess_tomo_with_labels(
-        tomo_paths,
-        args.labels_root,
-        args.max_extent,
-        args.subtomo_output
-    )
+                tomo_name = os.path.basename(subfolder_path)
 
-    print(f"Classifying {len(subtomo_files)} subtomograms...")
-    run_protein_classification_with_labels(
-        subtomo_files,
-        labels,
-        args.output_path,
-        args.model_path,
-        batch_size=args.batch_size
-    )
+                print(f"Classifying {len(subtomo_files)} subtomograms from {subfolder}...")
+                run_protein_classification_with_labels(
+                    subtomo_files,
+                    labels,
+                    args.output_path,
+                    args.model_path,
+                    tomo_name=tomo_name,
+                    batch_size=args.batch_size
+                )
+    else:
+        tomo_paths = [args.input_path]
+
+        print("Extracting subtomograms with labels...")
+        subtomo_files, labels = preprocess_tomo_with_labels(
+            tomo_paths,
+            args.labels_root,
+            args.max_extent,
+            args.subtomo_output
+        )
+
+        tomo_name = os.path.basename(args.input_path)
+
+        print(f"Classifying {len(subtomo_files)} subtomograms...")
+        run_protein_classification_with_labels(
+            subtomo_files,
+            labels,
+            args.output_path,
+            args.model_path,
+            tomo_name=tomo_name,
+            batch_size=args.batch_size
+        )
 
     print("Finished classification with label evaluation!")
 

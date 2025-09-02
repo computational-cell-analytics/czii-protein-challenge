@@ -15,6 +15,7 @@ from .data_loader import create_data_loader
 from .classification_dataset import ClassificationDataset
 
 from torch_em.model.resnet3d import resnet3d_18
+import torch.nn as nn
 from sklearn.preprocessing import LabelEncoder
 
 class ClassificationMetric:
@@ -52,8 +53,12 @@ def get_3d_model(
         from external.efficientnet3d.efficientnet_pytorch_3d import EfficientNet3D
         model = EfficientNet3D.from_name("efficientnet-b0", override_params={'num_classes': out_channels}, in_channels=in_channels)
     else:
-        #TODO add more arguments?
+        
         model = resnet3d_18(in_channels=in_channels, out_channels=out_channels)
+        
+        # Replace conv1 and maxpool
+        model.conv1 = nn.Conv3d(1, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        model.maxpool = nn.Identity()  # remove pooling to preserve resolution
 
     return model
 
@@ -150,7 +155,7 @@ def classification_training(
         check_loader(val_loader, n_samples=4)
         return
 
-    model = get_3d_model(EfficientNet=True,in_channels=in_channels, out_channels=out_channels)
+    model = get_3d_model(EfficientNet=False,in_channels=in_channels, out_channels=out_channels)
 
     # Set the default loss and metric (if no values where passed).
     loss = torch.nn.CrossEntropyLoss() if loss is None else loss

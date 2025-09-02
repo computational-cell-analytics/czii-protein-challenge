@@ -7,6 +7,7 @@ from glob import glob
 from typing import List, Tuple, Sequence
 from sklearn.model_selection import train_test_split
 from numpy.typing import ArrayLike
+from elf.io import open_file
 
 from classification.data_processing import extract_subtomograms, get_max_extent
 
@@ -81,11 +82,37 @@ def get_paths(
 
     return paths
 
+def get_non_zarr(input_path):
+    #TODO expand for other file types
 
-def get_volume(input_path: str) -> np.ndarray:
-    zarr_path = os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0")
-    zarr_file = zarr.open(zarr_path, mode="r")
-    return zarr_file[:]
+    import mrcfile
+
+    # Look for .mrc files in the directory
+    mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
+    
+    if not mrc_files:
+        raise FileNotFoundError(f"No .mrc file found in {input_path}")
+    if len(mrc_files) > 1:
+        raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
+    
+    # Get the single .mrc file
+    mrc_path = os.path.join(input_path, mrc_files[0])
+
+    # Open MRC file
+    with mrcfile.open(mrc_path, permissive=True) as mrc:
+        input_volume = mrc.data  
+
+    return input_volume
+
+def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
+    if zarr_:
+        zarr_path = os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0")
+        zarr_file = zarr.open(zarr_path, mode="r")
+        volume = zarr_file[:]
+    else:
+        volume = get_non_zarr(input_path)
+
+    return volume
 
 
 def load_heatmap(npy_filepath: str) -> np.ndarray:
@@ -175,12 +202,13 @@ def get_coords_and_targets(paths: List[str], target_root: str) -> Tuple[List[Lis
         json_folder = os.path.join(target_root, experiment_name)
         picks_folder = os.path.join(json_folder, "Picks")
 
-        # Load and parse JSONs
+        # Load and parse JSONs, skipping albumin.json
         json_files = [
             os.path.join(picks_folder, f)
             for f in os.listdir(picks_folder)
-            if f.endswith('.json')
+            if f.endswith('.json') and f != "albumin.json" #need this for synthetic data
         ]
+        
         coords, protein_types = parse_json_files(json_files)
 
         # Convert to integers for array slicing
@@ -196,7 +224,8 @@ def get_data(
     coords_all: List[List[Tuple[int, int, int]]],
     max_extent: int,
     in_channels: int,
-    targets: List[List[str]]
+    targets: List[List[str]],
+    zarr_: bool,
 ):
     """
     Given a list of paths to tomograms, extract subtomograms using detection coordinates.
@@ -207,7 +236,7 @@ def get_data(
     all_filtered_targets = []
 
     for path, coords, tomogram_targets in zip(paths, coords_all, targets):
-        raw_volume = get_volume(path)  # expected shape: (D, H, W)
+        raw_volume = get_volume(path, zarr_)  # expected shape: (D, H, W)
 
         subs, _, filtered_targets = extract_subtomograms(
             raw_volume,

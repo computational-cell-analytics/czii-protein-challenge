@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import torch_em
 from torch_em.model.resnet3d import resnet3d_18
+import torch.nn as nn
 from torch_em.transform.raw import normalize
 
 def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
@@ -60,9 +61,14 @@ def get_model(model_path, device, EfficientNet=False):
             in_channels=1,
             out_channels=6
         )
+        
+        # Replace conv1 and maxpool
+        model.conv1 = nn.Conv3d(1, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        model.maxpool = nn.Identity()  # remove pooling to preserve resolution
+
     model_path = os.path.join(model_path, "best.pt")
     checkpoint = torch.load(model_path, map_location=device, weights_only = False)
-    model.load_state_dict(checkpoint['model_state'])
+    model.load_state_dict(checkpoint['model_state'], strict=False)
     model.eval()
     model.to(device)
 
