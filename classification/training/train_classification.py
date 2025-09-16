@@ -43,35 +43,23 @@ def train(testset=True, model_name= "protein_classification"):
     val_paths = get_paths("val", datasets, EX_TRAIN_ROOT, output_path, testset=testset)
     test_paths = get_paths("test", datasets, EX_TRAIN_ROOT, output_path, testset=testset) if testset else []
 
-    train_coords, train_target = get_coords_and_targets(train_paths, target_root=EX_TARGET_ROOT)
-    val_coords, val_target = get_coords_and_targets(val_paths, target_root=EX_TARGET_ROOT)
-    test_coords, test_target = get_coords_and_targets(test_paths, target_root=EX_TARGET_ROOT) if testset else (None, None)
-
-    max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39 or was it 35??
     
-    print(f"max_extent {max_extent}")
-
-    # Now extract subtomograms
-    #TODO can I include the augmentation with the coordinate being slightly off in get_data???
-    train_data, train_target = get_data(train_paths, train_coords, max_extent, in_channels=in_channels, targets=train_target, zarr_=zarr_)
-    val_data, val_target = get_data(val_paths, val_coords, max_extent, in_channels=in_channels, targets = val_target, zarr_=zarr_)
-    test_data, test_target = get_data(test_paths, test_coords, max_extent, in_channels=in_channels, targets=test_target, zarr_=zarr_) if testset else None
-
     #TODO make this more automatic
+    max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39 or was it 35??
     halo=4
     patch_shape = (max_extent+halo, max_extent+halo, max_extent+halo)
     
 
     idx_to_label = classification_training(
         name=model_name,
-        train_data=train_data,
-        val_data=val_data,
-        test_data=test_data,
-        train_target=train_target,
-        val_target=val_target,
-        test_target=test_target,
+        train_paths=train_paths,
+        val_paths=val_paths,
+        test_paths=test_paths,
+        zarr_=zarr_,
+        max_extent=max_extent,
+        target_root = EX_TARGET_ROOT,
         patch_shape=patch_shape,
-        batch_size=64,
+        batch_size=8,
         lr=1e-4,
         logger=ClassificationLogger,
         trainer_class=ClassificationTrainer,

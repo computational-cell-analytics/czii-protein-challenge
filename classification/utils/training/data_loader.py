@@ -12,7 +12,7 @@ from torch_em.data.concat_dataset import ConcatDataset
 from numpy.typing import ArrayLike
 
 from .classification_dataset import ClassificationDataset
-
+from sklearn.preprocessing import LabelEncoder
 
 def samples_to_datasets(n_samples: int, n_datasets: int, split: str = "uniform") -> List[int]:
     assert split in ("balanced", "uniform")
@@ -23,8 +23,11 @@ def samples_to_datasets(n_samples: int, n_datasets: int, split: str = "uniform")
     raise NotImplementedError("Balanced splitting is not implemented.")
 
 def _load_dataset(
-    subtomogram_list: Sequence[ArrayLike],
-    targets: List[str],
+    paths: List[str],
+    zarr_: bool = True,
+    in_channels: int = 1,
+    max_extent:int = 39,
+    target_root: str = None,
     image_shape: Tuple[int, int, int] = None,
     normalization: Callable = None,
     augmentation: Callable = None,
@@ -36,8 +39,9 @@ def _load_dataset(
     Load subtomograms and their corresponding labels into a single Dataset.
 
     Args:
-        subtomogram_list: List of subtomograms (arrays), shape (C, D, H, W) per item.
-        targets: Flat list of labels corresponding to subtomograms.
+        paths: A List of paths to the full tomograms
+        zarr_: says if the full tomogram is a omezarr file or not
+        max_extent: size of bbox for the subtomograms of the proteins
         image_shape: Target shape to resize subtomograms (D, H, W).
         normalization: Function to normalize each subtomogram.
         augmentation: Function to augment each subtomogram.
@@ -48,22 +52,23 @@ def _load_dataset(
         A single Dataset containing all subtomograms and labels.
     """
 
-    n_samples = len(subtomogram_list)
+    n_samples = len(paths)
 
     print(f"n_samples {n_samples}")
 
-    if len(subtomogram_list) != len(targets):
-        raise ValueError(f"Length of subtomograms ({len(subtomogram_list)}) and targets ({len(targets)}) must match")
-
     ds = dataset_class(
-        subtomogram=subtomogram_list,
-        target=targets,
+        paths=paths,
+        zarr_=zarr_,
+        in_channels=in_channels,
+        max_extent=max_extent,
+        target_root=target_root,
         normalization=normalization,
         augmentation=augmentation,
         image_shape=image_shape,
         n_classes=n_classes,
         n_samples=n_samples,
     )
+
 
     #TODO more flexible along different datasets?
     '''
@@ -102,12 +107,13 @@ def _load_dataset(
 
 
 def create_data_loader(
-    train_data: Sequence[ArrayLike],
-    val_data: Sequence[ArrayLike],
-    test_data: Sequence[ArrayLike],
-    train_target: List[str],    # <-- NEW
-    val_target: List[str],      # <-- NEW
-    test_target: List[str],     # <-- NEW
+    train_data: List[str],
+    val_data: List[str],
+    test_data: List[str],
+    zarr_: bool = True,
+    in_channels: int = 1,
+    max_extent:int = 39,
+    target_root: str = None,
     normalization: Callable = None,
     augmentation: Callable = None,
     patch_shape: Tuple[int, int, int] = (32, 32, 32),
@@ -120,22 +126,39 @@ def create_data_loader(
 ):
 
     train_set = _load_dataset(
-        train_data, train_target, patch_shape,
+        train_data, 
+        zarr_, in_channels, max_extent, target_root,
+        patch_shape,
         normalization, augmentation,
         dataset_class, n_samples_train, n_classes
     )
     
     val_set = _load_dataset(
-        val_data, val_target, patch_shape,
+        val_data, 
+        zarr_, in_channels, max_extent, target_root,
+        patch_shape,
         normalization, augmentation,
         dataset_class, n_samples_val, n_classes
     )
 
     test_set = _load_dataset(
-        test_data, test_target, patch_shape,
+        test_data,
+        zarr_, in_channels, max_extent, target_root,
+        patch_shape,
         normalization, augmentation,
         dataset_class, n_classes=n_classes
     )
+
+    # --- Encode string labels to integers ---
+    all_labels = np.concatenate([train_set.targets, val_set.targets])  # <--- FIXED
+    encoder = LabelEncoder()
+    encoder.fit(all_labels)
+
+    train_target_int = encoder.transform(train_set.targets)
+    val_target_int = encoder.transform(val_set.targets)
+    test_target_int = encoder.transform(test_set.targets) if test_set is not None else None  # <--- FIXED
+
+    idx_to_label = {i: label for i, label in enumerate(encoder.classes_)}
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
@@ -146,6 +169,6 @@ def create_data_loader(
     val_loader.shuffle = True
     test_loader.shuffle=True
 
-    return train_loader, val_loader, test_loader
+    return train_loader, val_loader, test_loader, idx_to_label
 
 

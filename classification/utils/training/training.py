@@ -16,7 +16,7 @@ from .classification_dataset import ClassificationDataset
 
 from torch_em.model.resnet3d import resnet3d_18
 import torch.nn as nn
-from sklearn.preprocessing import LabelEncoder
+
 
 class ClassificationMetric:
     """Metric for classification training.
@@ -65,12 +65,12 @@ def get_3d_model(
 
 def classification_training(
     name: str,
-    train_data: Sequence[ArrayLike],
-    val_data: Sequence[ArrayLike],
-    test_data: Sequence[ArrayLike],
-    train_target: List[str],   
-    val_target: List[str],     
-    test_target: Optional[List[str]],
+    train_paths: List[str],
+    val_paths: List[str],
+    test_paths: List[str],
+    zarr_: bool,
+    max_extent:int,
+    target_root: str,
     patch_shape: Tuple[int, int, int],
     batch_size: int = 1,
     lr: float = 1e-4,
@@ -94,8 +94,9 @@ def classification_training(
 
     Args:
         name: Checkpoint name.
-        train_data, val_data, test_data: Each is a List of 3D subtomogram volumes: List[np.ndarray]
-        train_target, val_target, test_target: each a list of the targets. Same order than the subtomogram list.
+        train_data, val_data, test_data: Each is a List of paths to the full tomograms
+        zarr_: says if the full tomogram is a zarr or not
+        max_extent: size of bbox for the subtomograms of the proteins
         patch_shape: Shape of input patch.
         batch_size: Batch size.
         lr: Learning rate.
@@ -115,28 +116,19 @@ def classification_training(
         dataset_class: Dataset wrapper class.
         kwargs: Additional args for trainer.
     """
-    # --- Encode string labels to integers ---
-    all_labels = train_target + val_target
-    encoder = LabelEncoder()
-    encoder.fit(all_labels)
-
-    train_target_int = encoder.transform(train_target)
-    val_target_int = encoder.transform(val_target)
-    test_target_int = encoder.transform(test_target) if test_target is not None else None
-
-    # Store mapping for later decoding
-    idx_to_label = {i: label for i, label in enumerate(encoder.classes_)}
+    
 
     num_workers = 6  #TODO using this in location training as well, check if it should be different
 
     #TODO actually get the test_loader and store the data from it as subtomograms somewhere, is this possible?
-    train_loader, val_loader, test_loader = create_data_loader(
-        train_data=train_data,
-        val_data=val_data,
-        test_data=test_data,
-        train_target=train_target_int,
-        val_target=val_target_int,
-        test_target=test_target_int,
+    train_loader, val_loader, test_loader, idx_to_label = create_data_loader(
+        train_data=train_paths,
+        val_data=val_paths,
+        test_data=test_paths,
+        zarr_=zarr_,
+        in_channels=in_channels,
+        max_extent=max_extent,
+        target_root=target_root,
         normalization=normalization,
         augmentation=augmentations,
         patch_shape=patch_shape,

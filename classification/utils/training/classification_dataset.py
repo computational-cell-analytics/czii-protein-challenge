@@ -1,11 +1,11 @@
-from typing import Sequence, Tuple, Callable
+from typing import Sequence, Tuple, Callable, List
 import numpy as np
 import torch
 from numpy.typing import ArrayLike
 from skimage.transform import resize
 
 from classification.data_processing import extract_subtomograms
-
+from classification.training import get_coords_and_targets, get_data
 
 class ClassificationDataset(torch.utils.data.Dataset):
     """
@@ -32,18 +32,30 @@ class ClassificationDataset(torch.utils.data.Dataset):
     """
     def __init__(
         self,
-        subtomogram: Sequence[ArrayLike],
-        target: Sequence,
+        paths: List[str],
+        zarr_: bool = True,
+        in_channels: int = 1,
+        max_extent: int = 39,
+        target_root: str = None,
         normalization: Callable = None,
         augmentation: Callable = None,
         image_shape: Tuple[int, int, int] = None,
         n_classes: int = 2,
         n_samples: int = None,
     ):
+        self.target_root = target_root
         self.normalization = normalization
         self.augmentation = augmentation
         self.image_shape = image_shape
         self.n_classes = n_classes
+
+        print(f"max_extent {max_extent}")
+        #TODO maybe also put this into dataset? maybe not needed cuz it doesnt take too much memory
+        coords, target_ = get_coords_and_targets(paths, target_root=self.target_root)
+        
+        # Now extract subtomograms
+        #TODO can I include the augmentation with the coordinate being slightly off in get_data???
+        subtomogram, target = get_data(paths, coords, max_extent, in_channels=in_channels, targets=target_, zarr_=zarr_)
 
         self.data = subtomogram
         self.target = target
@@ -98,4 +110,8 @@ class ClassificationDataset(torch.utils.data.Dataset):
     @property
     def ndim(self):
         return self.data[0].ndim
+    
+    @property
+    def targets(self):
+        return self.target
 
