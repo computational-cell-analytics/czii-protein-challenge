@@ -58,6 +58,11 @@ def get_prediction_torch_em(
         warnings.simplefilter("ignore")
 
         if os.path.isdir(model_path):  # Load the model from a torch_em checkpoint.
+            import sys
+            import detection.utils as det_utils
+
+            sys.modules['utils'] = det_utils
+
             model = torch_em.util.load_model(checkpoint=model_path, device=device)
         else:  # Load the model directly from a serialized pytorch model.
             model = torch.load(model_path)

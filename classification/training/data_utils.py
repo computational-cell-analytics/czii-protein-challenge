@@ -106,9 +106,29 @@ def get_non_zarr(input_path):
 
 def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
     if zarr_:
-        zarr_path = os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0")
+        # Walk through directory tree and find the first .zarr folder
+        zarr_dir = None
+        for root, dirs, files in os.walk(input_path):
+            for d in dirs:
+                if d.endswith(".zarr"):
+                    zarr_dir = os.path.join(root, d)
+                    break
+            if zarr_dir:
+                break
+
+        if zarr_dir is None:
+            raise FileNotFoundError(f"No .zarr folder found under {input_path}")
+
+        # Append "0" subfolder
+        zarr_path = os.path.join(zarr_dir, "0")
+
+        if not os.path.exists(zarr_path):
+            raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
+
+        # Open and load volume
         zarr_file = zarr.open(zarr_path, mode="r")
         volume = zarr_file[:]
+        
     else:
         volume = get_non_zarr(input_path)
 

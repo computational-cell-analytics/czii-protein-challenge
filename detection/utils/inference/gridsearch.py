@@ -14,10 +14,32 @@ import numpy as np
 #TODO Do I want to make this more flexible??
 TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
 LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
+DEFAULT_JSON = "/mnt/lustre-emmy-hdd/usr/u12095/cryo-et/czii_challenge/training/protein_detection_czii_v4/split-ExperimentRuns.json"
 
 
-def get_volume(input_path):
-    zarr_file = zarr.open(os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"), mode='r')
+def get_volume(input_path: str) -> np.ndarray:
+
+    # Walk through directory tree and find the first .zarr folder
+    zarr_dir = None
+    for root, dirs, files in os.walk(input_path):
+        for d in dirs:
+            if d.endswith(".zarr"):
+                zarr_dir = os.path.join(root, d)
+                break
+        if zarr_dir:
+            break
+
+    if zarr_dir is None:
+        raise FileNotFoundError(f"No .zarr folder found under {input_path}")
+
+    # Append "0" subfolder
+    zarr_path = os.path.join(zarr_dir, "0")
+
+    if not os.path.exists(zarr_path):
+        raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
+
+    # Open and load volume
+    zarr_file = zarr.open(zarr_path, mode="r")
     input_volume = zarr_file[:]
 
     return input_volume
@@ -55,8 +77,8 @@ def gridsearch(json_val_path, model_path):
 
     for val_path in val_list:
 
-        image_path = get_full_image_path(json_val_path, val_path)
-        label_path = get_full_label_path(json_val_path, val_path)
+        image_path = get_full_image_path(json_val_path= DEFAULT_JSON, val_path=val_path)
+        label_path = get_full_label_path(json_val_path= DEFAULT_JSON, val_path=val_path)
 
         tiling = parse_tiling(tile_shape=None, halo=None) #TODO implement tiling and halo choices
 

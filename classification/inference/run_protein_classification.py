@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 import seaborn as sns
+import random
 
 from typing import List, Tuple
 
@@ -42,9 +43,29 @@ def get_non_zarr(input_path):
 
 def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
     if zarr_:
-        zarr_path = os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0")
+        # Walk through directory tree and find the first .zarr folder
+        zarr_dir = None
+        for root, dirs, files in os.walk(input_path):
+            for d in dirs:
+                if d.endswith(".zarr"):
+                    zarr_dir = os.path.join(root, d)
+                    break
+            if zarr_dir:
+                break
+
+        if zarr_dir is None:
+            raise FileNotFoundError(f"No .zarr folder found under {input_path}")
+
+        # Append "0" subfolder
+        zarr_path = os.path.join(zarr_dir, "0")
+
+        if not os.path.exists(zarr_path):
+            raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
+
+        # Open and load volume
         zarr_file = zarr.open(zarr_path, mode="r")
         volume = zarr_file[:]
+
     else:
         volume = get_non_zarr(input_path)
 
@@ -90,6 +111,49 @@ def preprocess_tomo_with_labels(
     return file_paths, labels
 
 
+def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label):
+    # --- Save confusion matrix ---
+    cm = confusion_matrix(truth_labels, pred_labels, labels=list(idx_to_label.values()))
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt="d", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues")
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title(f"Confusion Matrix - {name}")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, f"confusion_matrix_{name}.png"))
+    plt.close()
+
+    # --- Save results as list (CSV) ---
+    results_df = pd.DataFrame({
+        "sample_id": sample_ids,
+        "truth": truth_labels,
+        "prediction": pred_labels
+    })
+    results_df.to_csv(os.path.join(output_path, f"classification_results_{name}.csv"), index=False)
+
+    # --- Save scatter plot of embeddings (t-SNE of probs) ---
+    tsne = TSNE(n_components=2, random_state=42)
+    probs_2d = tsne.fit_transform(np.array(probs))
+
+    plt.figure(figsize=(8, 6))
+    for label in set(truth_labels):
+        mask = np.array(truth_labels) == label
+        plt.scatter(probs_2d[mask, 0], probs_2d[mask, 1], label=label, alpha=0.6)
+
+    plt.legend()
+    plt.title(f"t-SNE of classification probabilities - {name}")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, f"tsne_scatter_{name}.png"))
+    plt.close()
+
+    # --- Save classification report ---
+    report = classification_report(truth_labels, pred_labels, labels=list(idx_to_label.values()))
+    with open(os.path.join(output_path, f"classification_report_{name}.txt"), "w") as f:
+        f.write(report)
+
+
+def run_global_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, idx_to_label):
+    run_full_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, "ALL", idx_to_label)
 
 
 def run_protein_classification_with_labels(
@@ -98,7 +162,8 @@ def run_protein_classification_with_labels(
     output_path,
     model_path,
     tomo_name,
-    batch_size=16
+    batch_size=16,
+    save_full_results=True
 ):
     os.makedirs(output_path, exist_ok=True)
 
@@ -131,45 +196,11 @@ def run_protein_classification_with_labels(
     all_pred_labels = [idx_to_label[str(p)] for p in all_preds]
     all_truth_labels = [idx_to_label[str(t)] if str(t) in idx_to_label else t for t in all_truths]
 
-    # --- Save confusion matrix ---
-    cm = confusion_matrix(all_truth_labels, all_pred_labels, labels=list(idx_to_label.values()))
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt="d", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.title("Confusion Matrix")
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_path, f"confusion_matrix_{tomo_name}.png"))
-    plt.close()
+    if save_full_results:
+        # Full evaluation on all subtomograms
+        run_full_evaluation(all_sample_ids, all_truth_labels, all_pred_labels, all_probs, output_path, tomo_name, idx_to_label)
 
-    # --- Save results as list (CSV) ---
-    results_df = pd.DataFrame({
-        "sample_id": all_sample_ids,
-        "truth": all_truth_labels,
-        "prediction": all_pred_labels
-    })
-    results_df.to_csv(os.path.join(output_path, f"classification_results_{tomo_name}.csv"), index=False)
-
-    # --- Save scatter plot of embeddings (t-SNE of probs) ---
-    tsne = TSNE(n_components=2, random_state=42)
-    probs_2d = tsne.fit_transform(np.array(all_probs))
-
-    plt.figure(figsize=(8, 6))
-    for label in set(all_truth_labels):
-        mask = np.array(all_truth_labels) == label
-        plt.scatter(probs_2d[mask, 0], probs_2d[mask, 1], label=label, alpha=0.6)
-
-    plt.legend()
-    plt.title("t-SNE of classification probabilities")
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_path, f"tsne_scatter_{tomo_name}.png"))
-    plt.close()
-
-    # --- Save classification report ---
-    report = classification_report(all_truth_labels, all_pred_labels, labels=list(idx_to_label.values()))
-    with open(os.path.join(output_path, f"classification_report_{tomo_name}.txt"), "w") as f:
-        f.write(report)
-
+    return all_sample_ids, all_truth_labels, all_pred_labels, all_probs
 
 
 def main():
@@ -207,35 +238,52 @@ def main():
         help="Activate when input_path contains multiple directories for inference."
     )
 
-
     args = parser.parse_args()
     
     if args.multiple:
-        # Iterate over all subfolders in the input path
-        for subfolder in os.listdir(args.input_path):
-            subfolder_path = os.path.join(args.input_path, subfolder)
-            if os.path.isdir(subfolder_path):
-                tomo_paths = [subfolder_path]
+        global_ids, global_truths, global_preds, global_probs = [], [], [], []
 
-                print(f"Extracting subtomograms with labels from {subfolder}...")
-                subtomo_files, labels = preprocess_tomo_with_labels(
-                    tomo_paths,
-                    args.labels_root,
-                    args.max_extent,
-                    args.subtomo_output
-                )
+        # Collect all tomogram subfolders
+        tomogram_folders = [os.path.join(args.input_path, sf) for sf in os.listdir(args.input_path) if os.path.isdir(os.path.join(args.input_path, sf))]
 
-                tomo_name = os.path.basename(subfolder_path)
+        # Pick 10% of tomograms for per-tomogram evaluation
+        n_eval = max(1, int(len(tomogram_folders) * 0.1))
+        eval_tomos = set(random.sample(tomogram_folders, n_eval))
 
-                print(f"Classifying {len(subtomo_files)} subtomograms from {subfolder}...")
-                run_protein_classification_with_labels(
-                    subtomo_files,
-                    labels,
-                    args.output_path,
-                    args.model_path,
-                    tomo_name=tomo_name,
-                    batch_size=args.batch_size
-                )
+        for subfolder_path in tomogram_folders:
+            tomo_paths = [subfolder_path]
+
+            print(f"Extracting subtomograms with labels from {subfolder_path}...")
+            subtomo_files, labels = preprocess_tomo_with_labels(
+                tomo_paths,
+                args.labels_root,
+                args.max_extent,
+                args.subtomo_output
+            )
+
+            tomo_name = os.path.basename(subfolder_path)
+
+            print(f"Classifying {len(subtomo_files)} subtomograms from {subfolder_path}...")
+            sample_ids, truths, preds, probs = run_protein_classification_with_labels(
+                subtomo_files,
+                labels,
+                args.output_path,
+                args.model_path,
+                tomo_name=tomo_name,
+                batch_size=args.batch_size,
+                save_full_results=(subfolder_path in eval_tomos)  # only full eval for 10% tomograms
+            )
+
+            global_ids.extend(sample_ids)
+            global_truths.extend(truths)
+            global_preds.extend(preds)
+            global_probs.extend(probs)
+
+        # --- Global evaluation ---
+        with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v3/idx_to_label.json", "r") as f:
+            idx_to_label = json.load(f)
+        run_global_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, idx_to_label)
+
     else:
         tomo_paths = [args.input_path]
 
@@ -256,7 +304,8 @@ def main():
             args.output_path,
             args.model_path,
             tomo_name=tomo_name,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            save_full_results=True  # full evaluation in single mode
         )
 
     print("Finished classification with label evaluation!")

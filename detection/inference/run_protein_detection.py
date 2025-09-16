@@ -10,8 +10,29 @@ from detection.utils.prediction.prediction import get_prediction_torch_em
 from detection.utils.inference.protein_detection import protein_detection
 from detection.utils.training.tiling_helper import parse_tiling
 
-def get_volume(input_path):
-    zarr_file = zarr.open(os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"), mode='r')
+def get_volume(input_path: str) -> np.ndarray:
+
+    # Walk through directory tree and find the first .zarr folder
+    zarr_dir = None
+    for root, dirs, files in os.walk(input_path):
+        for d in dirs:
+            if d.endswith(".zarr"):
+                zarr_dir = os.path.join(root, d)
+                break
+        if zarr_dir:
+            break
+
+    if zarr_dir is None:
+        raise FileNotFoundError(f"No .zarr folder found under {input_path}")
+
+    # Append "0" subfolder
+    zarr_path = os.path.join(zarr_dir, "0")
+
+    if not os.path.exists(zarr_path):
+        raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
+
+    # Open and load volume
+    zarr_file = zarr.open(zarr_path, mode="r")
     input_volume = zarr_file[:]
 
     return input_volume

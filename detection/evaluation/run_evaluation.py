@@ -30,14 +30,22 @@ def evaluate_per_protein_type(pred_coords, label_path, model_name, input_name):
     with open(csv_file, mode='a', newline='') as file:
         writer = csv.writer(file)
         if write_header:
-            writer.writerow(["input_name", "protein_type", "precision", "recall", "f1", "dev_percentage", "sMAPE", "mae"])
+            writer.writerow([
+                "input_name", "protein_type", 
+                "precision", "recall", "f1", "dev_percentage", "sMAPE", "mae", 
+                "label_count", "pred_count"
+            ])
         
         for protein_type, label_coords_subset in label_dict.items():
-            
             precision, recall, f1, dev_percentage, sMAPE, mae = metric_coords(label_coords_subset, pred_coords)
             
-            # Extend input name
-            writer.writerow([input_name, protein_type, precision, recall, f1, dev_percentage, sMAPE, mae])
+            label_count = len(label_coords_subset)
+            pred_count = len(pred_coords)
+            
+            writer.writerow([
+                input_name, protein_type, precision, recall, f1, dev_percentage, sMAPE, mae,
+                label_count, pred_count
+            ])
     
     print(f"Per-protein metrics saved to {csv_file}")
 
@@ -62,8 +70,15 @@ def evaluate(pred_coords, label_path, model_name, input_name, evaluate_per_prote
     with open(csv_file, mode='a', newline='') as file:
         writer = csv.writer(file)
         if write_header:
-            writer.writerow(["input_name", "protein_type", "precision", "recall", "f1", "dev_percentage", "sMAPE", "mae"])
-        writer.writerow([input_name, "all", precision, recall, f1, dev_percentage, sMAPE, mae])
+            writer.writerow([
+                "input_name", "protein_type", 
+                "precision", "recall", "f1", "dev_percentage", "sMAPE", "mae", 
+                "label_count", "pred_count"
+            ])
+        writer.writerow([
+            input_name, "all", precision, recall, f1, dev_percentage, sMAPE, mae,
+            len(label_coords), len(predictions)
+        ])
 
     print(f"Metrics saved to {csv_file}")
 
@@ -111,7 +126,7 @@ def main():
 
     args = parser.parse_args()
 
-    file_ending = "_protein_detections_peak_local_max"
+    file_ending = "_protein_detections"#_peak_local_max"
 
     if os.path.isfile(args.pred_coords) and args.pred_coords.endswith(".json"):
         # Extract input_name from the filename
