@@ -279,5 +279,39 @@ def get_data(
 
     return subtomograms, all_filtered_targets
 
+def get_single_subtomogram(
+    path: str,
+    coord: Tuple[int, int, int],
+    max_extent: int,
+    in_channels: int,
+    target: str,
+    zarr_: bool,
+):
+    """
+    Load a single subtomogram on demand from a tomogram file.
+    """
+
+    # ⚠️ If get_volume loads the *whole* tomogram, 
+    # you may still use a lot of memory.
+    # If the data is in Zarr, you can slice directly:
+    raw_volume = get_volume(path, zarr_)  # (D, H, W)
+
+    subs, _, filtered_targets = extract_subtomograms(
+        raw_volume,
+        [coord],       # single coordinate
+        max_extent,
+        targets=[target],
+    )
+
+    sub = subs[0]
+    tgt = filtered_targets[0]
+
+    # add channel dimension
+    sub = np.expand_dims(sub, axis=0)  # (1, D, H, W)
+    if in_channels > 1:
+        sub = np.repeat(sub, in_channels, axis=0)
+
+    return sub, tgt
+
 
 

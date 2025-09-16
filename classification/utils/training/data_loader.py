@@ -1,18 +1,12 @@
-
-
-######TODO####################################
-#implement augmentations that also move the 'peak'/coordinate of the protein a little. I think I want it here
-
-from typing import Callable, List, Sequence, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from torch_em.data.concat_dataset import ConcatDataset
-from numpy.typing import ArrayLike
+from sklearn.preprocessing import LabelEncoder
 
 from .classification_dataset import ClassificationDataset
-from sklearn.preprocessing import LabelEncoder
+
 
 def samples_to_datasets(n_samples: int, n_datasets: int, split: str = "uniform") -> List[int]:
     assert split in ("balanced", "uniform")
@@ -22,11 +16,12 @@ def samples_to_datasets(n_samples: int, n_datasets: int, split: str = "uniform")
         return [samples_per_ds + 1 if i < remainder else samples_per_ds for i in range(n_datasets)]
     raise NotImplementedError("Balanced splitting is not implemented.")
 
+
 def _load_dataset(
     paths: List[str],
     zarr_: bool = True,
     in_channels: int = 1,
-    max_extent:int = 39,
+    max_extent: int = 39,
     target_root: str = None,
     image_shape: Tuple[int, int, int] = None,
     normalization: Callable = None,
@@ -36,25 +31,8 @@ def _load_dataset(
     n_classes: int = 2,
 ) -> torch.utils.data.Dataset:
     """
-    Load subtomograms and their corresponding labels into a single Dataset.
-
-    Args:
-        paths: A List of paths to the full tomograms
-        zarr_: says if the full tomogram is a omezarr file or not
-        max_extent: size of bbox for the subtomograms of the proteins
-        image_shape: Target shape to resize subtomograms (D, H, W).
-        normalization: Function to normalize each subtomogram.
-        augmentation: Function to augment each subtomogram.
-        dataset_class: Dataset class to use (default: ClassificationDataset).
-        n_classes: Number of classes for classification.
-
-    Returns:
-        A single Dataset containing all subtomograms and labels.
+    Initialize a ClassificationDataset without preloading all subtomograms.
     """
-
-    n_samples = len(paths)
-
-    print(f"n_samples {n_samples}")
 
     ds = dataset_class(
         paths=paths,
@@ -69,6 +47,7 @@ def _load_dataset(
         n_samples=n_samples,
     )
 
+    print(f"Initialized dataset with {len(ds)} samples from {len(paths)} tomograms")
 
     #TODO more flexible along different datasets?
     '''
@@ -112,7 +91,7 @@ def create_data_loader(
     test_data: List[str],
     zarr_: bool = True,
     in_channels: int = 1,
-    max_extent:int = 39,
+    max_extent: int = 39,
     target_root: str = None,
     normalization: Callable = None,
     augmentation: Callable = None,
@@ -126,15 +105,15 @@ def create_data_loader(
 ):
 
     train_set = _load_dataset(
-        train_data, 
+        train_data,
         zarr_, in_channels, max_extent, target_root,
         patch_shape,
         normalization, augmentation,
         dataset_class, n_samples_train, n_classes
     )
-    
+
     val_set = _load_dataset(
-        val_data, 
+        val_data,
         zarr_, in_channels, max_extent, target_root,
         patch_shape,
         normalization, augmentation,
@@ -150,25 +129,36 @@ def create_data_loader(
     )
 
     # --- Encode string labels to integers ---
-    all_labels = np.concatenate([train_set.targets, val_set.targets])  # <--- FIXED
+    all_labels = np.concatenate([train_set.targets_array, val_set.targets_array])
     encoder = LabelEncoder()
     encoder.fit(all_labels)
 
-    train_target_int = encoder.transform(train_set.targets)
-    val_target_int = encoder.transform(val_set.targets)
-    test_target_int = encoder.transform(test_set.targets) if test_set is not None else None  # <--- FIXED
-
     idx_to_label = {i: label for i, label in enumerate(encoder.classes_)}
 
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        persistent_workers=False
+    )
+    val_loader = DataLoader(
+        val_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        persistent_workers=False
+    )
+    test_loader = DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        persistent_workers=False
+    )
 
-
-    train_loader.shuffle = True
-    val_loader.shuffle = True
+    train_loader.shuffle = True 
+    val_loader.shuffle = True 
     test_loader.shuffle=True
-
+    
     return train_loader, val_loader, test_loader, idx_to_label
-
-

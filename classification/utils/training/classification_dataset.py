@@ -1,35 +1,17 @@
-from typing import Sequence, Tuple, Callable, List
+from typing import List, Tuple, Callable
 import numpy as np
 import torch
-from numpy.typing import ArrayLike
 from skimage.transform import resize
 
-from classification.data_processing import extract_subtomograms
-from classification.training import get_coords_and_targets, get_data
+from itertools import chain
+from classification.training import get_coords_and_targets, get_single_subtomogram, get_volume
 
 class ClassificationDataset(torch.utils.data.Dataset):
     """
-    Dataset for classification training using pre-extracted 3D subtomograms and their labels.
-
-    Args:
-        subtomogram (Sequence[ArrayLike]): 
-            Sequence of 3D subtomogram volumes (e.g., numpy arrays with shape (C, D, H, W)).
-        target (Sequence):
-            Sequence of classification labels corresponding to each subtomogram.
-        normalization (Callable, optional):
-            Function to apply normalization to each subtomogram.
-        augmentation (Callable, optional):
-            Function to apply data augmentation to each subtomogram.
-        image_shape (Tuple[int, int, int], optional):
-            If given, each subtomogram will be resized to this shape (D, H, W).
-        n_classes (int, optional):
-            Number of output classes. Used for validation or consistency checks.
-        n_samples (int, optional):
-            Expected number of samples. If provided, will be checked against the length of the data.
-
-    Returns:
-        (ndarray, label): Tuple containing the processed subtomogram and its corresponding label.
+    Dataset for classification training using lazy subtomogram extraction.
+    Automatically skips out-of-bounds subtomograms.
     """
+
     def __init__(
         self,
         paths: List[str],
@@ -43,59 +25,88 @@ class ClassificationDataset(torch.utils.data.Dataset):
         n_classes: int = 2,
         n_samples: int = None,
     ):
+        self.zarr_ = zarr_
+        self.in_channels = in_channels
+        self.max_extent = max_extent
         self.target_root = target_root
         self.normalization = normalization
         self.augmentation = augmentation
         self.image_shape = image_shape
         self.n_classes = n_classes
 
-        print(f"max_extent {max_extent}")
-        #TODO maybe also put this into dataset? maybe not needed cuz it doesnt take too much memory
-        coords, target_ = get_coords_and_targets(paths, target_root=self.target_root)
-        
-        # Now extract subtomograms
-        #TODO can I include the augmentation with the coordinate being slightly off in get_data???
-        subtomogram, target = get_data(paths, coords, max_extent, in_channels=in_channels, targets=target_, zarr_=zarr_)
+        # Load metadata per tomogram
+        coords_list, targets_list = get_coords_and_targets(paths, target_root=self.target_root)
 
-        self.data = subtomogram
-        self.target = target
+        # Filter out-of-bounds coordinates
+        valid_coords = []
+        valid_targets = []
+        valid_paths = []
 
-        if len(self.data) != len(self.target):
-            raise ValueError(f"Length of data and target don't agree: {len(self.data)} != {len(self.target)}")
+        for path, coords, targets in zip(paths, coords_list, targets_list):
+            volume = get_volume(path, zarr_)
+            D, H, W = volume.shape
+            half = self.max_extent // 2
+            for c, t in zip(coords, targets):
+                z, y, x = c
+                if (z - half >= 0 and z + half < D and
+                    y - half >= 0 and y + half < H and
+                    x - half >= 0 and x + half < W):
+                    valid_coords.append(c)
+                    valid_targets.append(t)
+                    valid_paths.append(path)
 
-        # Create mapping from string labels to integer indices
-        self.classes = sorted(list(set(self.target)))
+        self.coords = valid_coords
+        self.targets = valid_targets
+        self.paths = valid_paths
+
+        # Label mapping
+        self.classes = sorted(set(self.targets))
         self.label_to_index = {label: idx for idx, label in enumerate(self.classes)}
 
+        # Check n_samples if specified
+        if n_samples is not None and len(self.targets) != n_samples:
+            raise ValueError(f"Expected {n_samples} samples, got {len(self.targets)}")
+
+        print(f"Initialized dataset with {len(self.targets)} subtomograms from {len(paths)} tomograms")
 
     def __len__(self):
-        return len(self.data)
-
-    def resize(self, x):
-        """@private
-        """
-        out = [resize(channel, self.image_shape, preserve_range=True)[None] for channel in x]
-        return np.concatenate(out, axis=0)
+        return len(self.targets)
 
     def __getitem__(self, index):
-        x, y = self.data[index], self.target[index]
+        path = self.paths[index]
+        coord = self.coords[index]
+        label = self.targets[index]
 
-        # apply normalization
+        try:
+            x, y = get_single_subtomogram(
+                path,
+                coord,
+                self.max_extent,
+                self.in_channels,
+                label,
+                self.zarr_,
+            )
+        except (IndexError, ValueError):
+            # sample failed, pick a random other sample
+            import random
+            new_index = random.randint(0, len(self) - 1)
+            return self[new_index]
+
+        # Normalization
         if self.normalization is not None:
             x = self.normalization(x)
 
-        # resize to sample shape if it was given
+        # Resize
         if self.image_shape is not None:
-            x = self.resize(x)
+            x = self._resize(x)
 
-        # apply augmentations (if any)
+        # Augmentation
         if self.augmentation is not None:
             _shape = x.shape
-            # adds unwanted batch axis
             x = self.augmentation(x)[0][0]
             assert x.shape == _shape
 
-
+        # Convert to tensors
         if not isinstance(x, torch.Tensor):
             x = torch.tensor(x, dtype=torch.float32)
 
@@ -107,11 +118,16 @@ class ClassificationDataset(torch.utils.data.Dataset):
         return x, y
 
 
+    def _resize(self, x):
+        out = [resize(ch, self.image_shape, preserve_range=True)[None] for ch in x]
+        return np.concatenate(out, axis=0)
+
     @property
     def ndim(self):
-        return self.data[0].ndim
-    
-    @property
-    def targets(self):
-        return self.target
+        # Lazily compute ndim from first sample
+        sample, _ = self[0]
+        return sample.ndim
 
+    @property
+    def targets_array(self):
+        return np.array(self.targets)
