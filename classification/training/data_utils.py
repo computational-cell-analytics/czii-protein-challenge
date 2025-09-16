@@ -106,32 +106,31 @@ def get_non_zarr(input_path):
 
 def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
     if zarr_:
-        # Walk through directory tree and find the first .zarr folder
-        zarr_dir = None
+        # Recursive search for .zarr folders
+        zarr_folders = []
         for root, dirs, files in os.walk(input_path):
             for d in dirs:
                 if d.endswith(".zarr"):
-                    zarr_dir = os.path.join(root, d)
-                    break
-            if zarr_dir:
-                break
-
-        if zarr_dir is None:
+                    zarr_folders.append(os.path.join(root, d))
+        
+        if not zarr_folders:
             raise FileNotFoundError(f"No .zarr folder found under {input_path}")
-
+        
+        # Prefer denoised.zarr if it exists
+        zarr_dir = next((f for f in zarr_folders if os.path.basename(f) == "denoised.zarr"), zarr_folders[0])
+        
         # Append "0" subfolder
         zarr_path = os.path.join(zarr_dir, "0")
-
         if not os.path.exists(zarr_path):
             raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
-
+        
         # Open and load volume
         zarr_file = zarr.open(zarr_path, mode="r")
         volume = zarr_file[:]
         
     else:
         volume = get_non_zarr(input_path)
-
+    
     return volume
 
 

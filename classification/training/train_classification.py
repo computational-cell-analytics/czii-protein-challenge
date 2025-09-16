@@ -59,7 +59,7 @@ def train(testset=True, model_name= "protein_classification"):
         max_extent=max_extent,
         target_root = EX_TARGET_ROOT,
         patch_shape=patch_shape,
-        batch_size=8,
+        batch_size=64,
         lr=1e-4,
         logger=ClassificationLogger,
         trainer_class=ClassificationTrainer,
@@ -192,7 +192,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v14"
+    model_name = "protein_classification_czii_v15"
     train(args.testset, model_name)
     #mixed_train(args.testset, model_name)
 

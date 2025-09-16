@@ -5,15 +5,34 @@ import argparse
 from detection.utils import get_paths  # noqa
 from detection.utils import supervised_training  # noqa
 
-TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
-LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
+TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
+LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
-
+def find_zarr_folder(base_path):
+    zarr_folders = []
+    
+    # Walk through all subdirectories recursively
+    for root, dirs, files in os.walk(base_path):
+        for d in dirs:
+            if d.endswith(".zarr"):
+                zarr_folders.append(os.path.join(root, d))
+    
+    if not zarr_folders:
+        raise FileNotFoundError(f"No .zarr folder found in {base_path}")
+    
+    # Prefer denoised.zarr if it exists
+    for folder in zarr_folders:
+        if os.path.basename(folder) == "denoised.zarr":
+            return folder
+    
+    # Otherwise, return the first .zarr found
+    return zarr_folders[0]
+    
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):
 
-    datasets = ["ExperimentRuns"]
-    model_name = "protein_detection_czii_v4"
+    datasets = ["ExperimentRuns", "tomograms"]
+    model_name = "protein_detection_czii_v5"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -45,9 +64,9 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     check = False
 
     #add the zarr file path ending to each path
-    train_paths = [os.path.join(path, "VoxelSpacing10.000", "denoised.zarr") for path in train_paths]
-    val_paths = [os.path.join(path, "VoxelSpacing10.000", "denoised.zarr") for path in val_paths]
-    test_paths = [os.path.join(path, "VoxelSpacing10.000", "denoised.zarr") for path in test_paths]
+    train_paths = [find_zarr_folder(path) for path in train_paths]
+    val_paths = [find_zarr_folder(path) for path in val_paths]
+    test_paths = [find_zarr_folder(path) for path in test_paths]
 
     # TODO do we want n_samples_train and n_samples_val in the supervised training?
     supervised_training(
