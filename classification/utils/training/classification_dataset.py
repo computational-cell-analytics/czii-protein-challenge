@@ -15,7 +15,6 @@ class ClassificationDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         paths: List[str],
-        zarr_: bool = True,
         in_channels: int = 1,
         max_extent: int = 39,
         target_root: str = None,
@@ -25,7 +24,6 @@ class ClassificationDataset(torch.utils.data.Dataset):
         n_classes: int = 2,
         n_samples: int = None,
     ):
-        self.zarr_ = zarr_
         self.in_channels = in_channels
         self.max_extent = max_extent
         self.target_root = target_root
@@ -43,7 +41,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
         valid_paths = []
 
         for path, coords, targets in zip(paths, coords_list, targets_list):
-            volume = get_volume(path, zarr_)
+            volume = get_volume(path)
             D, H, W = volume.shape
             half = self.max_extent // 2
             for c, t in zip(coords, targets):
@@ -84,7 +82,6 @@ class ClassificationDataset(torch.utils.data.Dataset):
                 self.max_extent,
                 self.in_channels,
                 label,
-                self.zarr_,
             )
         except (IndexError, ValueError):
             # sample failed, pick a random other sample

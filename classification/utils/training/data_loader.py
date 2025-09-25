@@ -19,7 +19,6 @@ def samples_to_datasets(n_samples: int, n_datasets: int, split: str = "uniform")
 
 def _load_dataset(
     paths: List[str],
-    zarr_: bool = True,
     in_channels: int = 1,
     max_extent: int = 39,
     target_root: str = None,
@@ -36,7 +35,6 @@ def _load_dataset(
 
     ds = dataset_class(
         paths=paths,
-        zarr_=zarr_,
         in_channels=in_channels,
         max_extent=max_extent,
         target_root=target_root,
@@ -89,7 +87,6 @@ def create_data_loader(
     train_data: List[str],
     val_data: List[str],
     test_data: List[str],
-    zarr_: bool = True,
     in_channels: int = 1,
     max_extent: int = 39,
     target_root: str = None,
@@ -106,7 +103,7 @@ def create_data_loader(
 
     train_set = _load_dataset(
         train_data,
-        zarr_, in_channels, max_extent, target_root,
+        in_channels, max_extent, target_root,
         patch_shape,
         normalization, augmentation,
         dataset_class, n_samples_train, n_classes
@@ -114,7 +111,7 @@ def create_data_loader(
 
     val_set = _load_dataset(
         val_data,
-        zarr_, in_channels, max_extent, target_root,
+        in_channels, max_extent, target_root,
         patch_shape,
         normalization, augmentation,
         dataset_class, n_samples_val, n_classes
@@ -122,7 +119,7 @@ def create_data_loader(
 
     test_set = _load_dataset(
         test_data,
-        zarr_, in_channels, max_extent, target_root,
+        in_channels, max_extent, target_root,
         patch_shape,
         normalization, augmentation,
         dataset_class, n_classes=n_classes
@@ -160,5 +157,5 @@ def create_data_loader(
     train_loader.shuffle = True 
     val_loader.shuffle = True 
     test_loader.shuffle=True
-    
+
     return train_loader, val_loader, test_loader, idx_to_label

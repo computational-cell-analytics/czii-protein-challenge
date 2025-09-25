@@ -68,7 +68,6 @@ def classification_training(
     train_paths: List[str],
     val_paths: List[str],
     test_paths: List[str],
-    zarr_: bool,
     max_extent:int,
     target_root: str,
     patch_shape: Tuple[int, int, int],
@@ -95,7 +94,6 @@ def classification_training(
     Args:
         name: Checkpoint name.
         train_data, val_data, test_data: Each is a List of paths to the full tomograms
-        zarr_: says if the full tomogram is a zarr or not
         max_extent: size of bbox for the subtomograms of the proteins
         patch_shape: Shape of input patch.
         batch_size: Batch size.
@@ -125,7 +123,6 @@ def classification_training(
         train_data=train_paths,
         val_data=val_paths,
         test_data=test_paths,
-        zarr_=zarr_,
         in_channels=in_channels,
         max_extent=max_extent,
         target_root=target_root,

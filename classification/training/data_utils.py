@@ -104,18 +104,16 @@ def get_non_zarr(input_path):
 
     return input_volume
 
-def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
-    if zarr_:
-        # Recursive search for .zarr folders
-        zarr_folders = []
-        for root, dirs, files in os.walk(input_path):
-            for d in dirs:
-                if d.endswith(".zarr"):
-                    zarr_folders.append(os.path.join(root, d))
-        
-        if not zarr_folders:
-            raise FileNotFoundError(f"No .zarr folder found under {input_path}")
-        
+def get_volume(input_path: str) -> np.ndarray:
+    # Recursive search for .zarr folders
+    zarr_folders = [
+        os.path.join(root, d)
+        for root, dirs, _ in os.walk(input_path)
+        for d in dirs
+        if d.endswith(".zarr")
+    ]
+    
+    if zarr_folders:
         # Prefer denoised.zarr if it exists
         zarr_dir = next((f for f in zarr_folders if os.path.basename(f) == "denoised.zarr"), zarr_folders[0])
         
@@ -127,8 +125,8 @@ def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
         # Open and load volume
         zarr_file = zarr.open(zarr_path, mode="r")
         volume = zarr_file[:]
-        
     else:
+        # Fallback to non-zarr loader
         volume = get_non_zarr(input_path)
     
     return volume
@@ -284,7 +282,6 @@ def get_single_subtomogram(
     max_extent: int,
     in_channels: int,
     target: str,
-    zarr_: bool,
 ):
     """
     Load a single subtomogram on demand from a tomogram file.
@@ -293,7 +290,7 @@ def get_single_subtomogram(
     # ⚠️ If get_volume loads the *whole* tomogram, 
     # you may still use a lot of memory.
     # If the data is in Zarr, you can slice directly:
-    raw_volume = get_volume(path, zarr_)  # (D, H, W)
+    raw_volume = get_volume(path)  # (D, H, W)
 
     subs, _, filtered_targets = extract_subtomograms(
         raw_volume,
