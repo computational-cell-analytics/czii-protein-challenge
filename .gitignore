@@ -1,5 +1,6 @@
 # Ignore node_modules folder
 */slurm/
+/logs/
 assisting_files/
 __pycache__/
 detection/evaluation/results/

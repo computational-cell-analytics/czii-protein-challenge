@@ -88,7 +88,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         upper_bound=None,
         test_paths=test_paths,
         test_label_paths=test_label_paths,
-        save_root="/mnt/lustre-emmy-hdd/usr/u12095/cryo-et/czii_challenge/models",
+        save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
     )
 
 

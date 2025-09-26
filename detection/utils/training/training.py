@@ -151,7 +151,7 @@ def supervised_training(
         val_loader=val_loader,
         learning_rate=lr,
         mixed_precision=True,
-        log_image_interval=100,
+        log_image_interval=100, # if logger error use logger=None
         compile_model=False,
         save_root=save_root,
         loss=loss,

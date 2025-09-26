@@ -52,7 +52,7 @@ def run_protein_detection(input_path, output_path, model_path, json_val_path):
 
     model_name = os.path.basename(os.path.normpath(model_path))
     input_name = os.path.basename(input_path)
-    output_folder = os.path.join(output_path, model_name)
+    output_folder = output_path #os.path.join(output_path, model_name)
     os.makedirs(output_folder, exist_ok=True)
 
     #save prediction
