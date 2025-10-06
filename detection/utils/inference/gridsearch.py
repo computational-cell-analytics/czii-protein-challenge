@@ -17,32 +17,55 @@ LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/over
 DEFAULT_JSON = "/mnt/lustre-emmy-hdd/usr/u12095/cryo-et/czii_challenge/training/protein_detection_czii_v4/split-ExperimentRuns.json"
 
 
-def get_volume(input_path: str) -> np.ndarray:
+def get_non_zarr(input_path):
+    #TODO expand for other file types
 
-    # Walk through directory tree and find the first .zarr folder
-    zarr_dir = None
-    for root, dirs, files in os.walk(input_path):
-        for d in dirs:
-            if d.endswith(".zarr"):
-                zarr_dir = os.path.join(root, d)
-                break
-        if zarr_dir:
-            break
+    import mrcfile
 
-    if zarr_dir is None:
-        raise FileNotFoundError(f"No .zarr folder found under {input_path}")
+    # Look for .mrc files in the directory
+    mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
+    
+    if not mrc_files:
+        raise FileNotFoundError(f"No .mrc file found in {input_path}")
+    if len(mrc_files) > 1:
+        raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
+    
+    # Get the single .mrc file
+    mrc_path = os.path.join(input_path, mrc_files[0])
 
-    # Append "0" subfolder
-    zarr_path = os.path.join(zarr_dir, "0")
-
-    if not os.path.exists(zarr_path):
-        raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
-
-    # Open and load volume
-    zarr_file = zarr.open(zarr_path, mode="r")
-    input_volume = zarr_file[:]
+    # Open MRC file
+    with mrcfile.open(mrc_path, permissive=True) as mrc:
+        input_volume = mrc.data  
 
     return input_volume
+
+def get_volume(input_path: str) -> np.ndarray:
+    # Recursive search for .zarr folders
+    zarr_folders = [
+        os.path.join(root, d)
+        for root, dirs, _ in os.walk(input_path)
+        for d in dirs
+        if d.endswith(".zarr")
+    ]
+    
+    if zarr_folders:
+        # Prefer denoised.zarr if it exists
+        zarr_dir = next((f for f in zarr_folders if os.path.basename(f) == "denoised.zarr"), zarr_folders[0])
+        
+        # Append "0" subfolder
+        zarr_path = os.path.join(zarr_dir, "0")
+        if not os.path.exists(zarr_path):
+            raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
+        
+        # Open and load volume
+        zarr_file = zarr.open(zarr_path, mode="r")
+        volume = zarr_file[:]
+    else:
+        # Fallback to non-zarr loader
+        volume = get_non_zarr(input_path)
+    
+    return volume
+
 
 def get_full_image_path(json_val_path, val_path):
     file_name = os.path.basename(json_val_path)

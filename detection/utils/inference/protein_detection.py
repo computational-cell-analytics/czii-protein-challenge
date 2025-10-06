@@ -2,7 +2,7 @@ import numpy as np
 from skimage.feature import blob_log, peak_local_max
 from .gridsearch import gridsearch
 
-def protein_detection(heatmap, json_val_path, model_path): #TODO do this properly
+def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO do this properly
     """
     Detects local maxima and estimates sizes of Gaussians in a 3D heatmap.
 
@@ -14,8 +14,8 @@ def protein_detection(heatmap, json_val_path, model_path): #TODO do this properl
             - 'coordinates': Tuple of (z, y, x) for the local maxima
             - 'size': Estimated size of the Gaussian (sigma equivalent)
     """
-
-    threshold = gridsearch(json_val_path, model_path) 
+    if threshold is None:
+        threshold = gridsearch(json_val_path, model_path) 
     #smalles protein structure: "beta-amylase": 33.27
     #bigges protein structure: "ribosome": 109.02,
     #0.3 is the factor to match the PDB size to the experimental data size
@@ -33,4 +33,4 @@ def protein_detection(heatmap, json_val_path, model_path): #TODO do this properl
         'size': sizes
     })
 '''
-    return pred_coords.tolist()
+    return pred_coords.tolist(), threshold

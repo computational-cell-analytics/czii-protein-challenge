@@ -37,7 +37,7 @@ def get_normalization():
 def train(testset=True, model_name= "protein_classification"):
     in_channels=1
     n_classes = 6
-    datasets = ["ExperimentRuns", "ExperimentRuns_faket", "tomograms"]
+    datasets = ["ExperimentRuns_faket_snr_1_2"]
     #model_name = "protein_classification_czii_v11"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
@@ -88,7 +88,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v18"
+    model_name = "protein_classification_czii_v20"
     train(args.testset, model_name)
     #mixed_train(args.testset, model_name)
 

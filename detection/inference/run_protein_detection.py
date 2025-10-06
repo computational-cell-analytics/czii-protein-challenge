@@ -10,34 +10,56 @@ from detection.utils.prediction.prediction import get_prediction_torch_em
 from detection.utils.inference.protein_detection import protein_detection
 from detection.utils.training.tiling_helper import parse_tiling
 
-def get_volume(input_path: str) -> np.ndarray:
+def get_non_zarr(input_path):
+    #TODO expand for other file types
 
-    # Walk through directory tree and find the first .zarr folder
-    zarr_dir = None
-    for root, dirs, files in os.walk(input_path):
-        for d in dirs:
-            if d.endswith(".zarr"):
-                zarr_dir = os.path.join(root, d)
-                break
-        if zarr_dir:
-            break
+    import mrcfile
 
-    if zarr_dir is None:
-        raise FileNotFoundError(f"No .zarr folder found under {input_path}")
+    # Look for .mrc files in the directory
+    mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
+    
+    if not mrc_files:
+        raise FileNotFoundError(f"No .mrc file found in {input_path}")
+    if len(mrc_files) > 1:
+        raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
+    
+    # Get the single .mrc file
+    mrc_path = os.path.join(input_path, mrc_files[0])
 
-    # Append "0" subfolder
-    zarr_path = os.path.join(zarr_dir, "0")
-
-    if not os.path.exists(zarr_path):
-        raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
-
-    # Open and load volume
-    zarr_file = zarr.open(zarr_path, mode="r")
-    input_volume = zarr_file[:]
+    # Open MRC file
+    with mrcfile.open(mrc_path, permissive=True) as mrc:
+        input_volume = mrc.data  
 
     return input_volume
 
-def run_protein_detection(input_path, output_path, model_path, json_val_path):
+def get_volume(input_path: str) -> np.ndarray:
+    # Recursive search for .zarr folders
+    zarr_folders = [
+        os.path.join(root, d)
+        for root, dirs, _ in os.walk(input_path)
+        for d in dirs
+        if d.endswith(".zarr")
+    ]
+    
+    if zarr_folders:
+        # Prefer denoised.zarr if it exists
+        zarr_dir = next((f for f in zarr_folders if os.path.basename(f) == "denoised.zarr"), zarr_folders[0])
+        
+        # Append "0" subfolder
+        zarr_path = os.path.join(zarr_dir, "0")
+        if not os.path.exists(zarr_path):
+            raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
+        
+        # Open and load volume
+        zarr_file = zarr.open(zarr_path, mode="r")
+        volume = zarr_file[:]
+    else:
+        # Fallback to non-zarr loader
+        volume = get_non_zarr(input_path)
+    
+    return volume
+
+def run_protein_detection(input_path, output_path, model_path, json_val_path, threshold=None):
 
     tiling = parse_tiling(tile_shape=None, halo=None) #TODO implement tiling and halo choices
     print(f"using tiling {tiling}")
@@ -46,7 +68,7 @@ def run_protein_detection(input_path, output_path, model_path, json_val_path):
 
     pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model_path=model_path, verbose=True)
     print(f"using the validation set listed in {json_val_path}")
-    detections = protein_detection(pred, json_val_path, model_path)
+    detections, threshold = protein_detection(pred, json_val_path, model_path, threshold=threshold)
 
     print(f"these are the results: {detections}")
 
@@ -67,17 +89,20 @@ def run_protein_detection(input_path, output_path, model_path, json_val_path):
         json.dump(detections, f, indent=4)
     print(f"Coordinates saved to {output_json_file}")
 
+    return threshold
+
 
 def process_folder(args):
     input_files = []
     input_files = [os.path.join(args.input_path, name) for name in os.listdir(args.input_path)
                    if os.path.isdir(os.path.join(args.input_path, name))]
 
+    threshold = None  # start with None, first run computes it
+
     pbar = tqdm(input_files, desc="Run protein detection")
     for input_path in pbar:
-
-        run_protein_detection(
-            input_path, args.output_path, args.model_path, args.json_val_path
+        threshold = run_protein_detection(
+            input_path, args.output_path, args.model_path, args.json_val_path, threshold=threshold
         )
 
 def main():
@@ -105,7 +130,7 @@ def main():
     file = args.file
 
     if file:
-        run_protein_detection(args.input_path, args.output_path, args.model_path, args.json_val_path)
+        _ = run_protein_detection(args.input_path, args.output_path, args.model_path, args.json_val_path)
     else:
         process_folder(args)
 

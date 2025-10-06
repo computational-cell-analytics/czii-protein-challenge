@@ -111,7 +111,7 @@ def preprocess_tomo_with_labels(
 
 
 def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label):
-    # --- Save confusion matrix ---
+    # --- Save confusion matrix (raw counts) ---
     cm = confusion_matrix(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt="d", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues")
@@ -122,6 +122,17 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.savefig(os.path.join(output_path, f"confusion_matrix_{name}.png"))
     plt.close()
 
+    # --- Save confusion matrix (normalized: 0-1) ---
+    cm_norm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm_norm, annot=True, fmt=".2f", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues", vmin=0, vmax=1)
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title(f"Confusion Matrix - {name}")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, f"confusion_matrix_normalized_{name}.png"))
+    plt.close()
+    '''
     # --- Save results as list (CSV) ---
     results_df = pd.DataFrame({
         "sample_id": sample_ids,
@@ -144,11 +155,12 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.tight_layout()
     plt.savefig(os.path.join(output_path, f"tsne_scatter_{name}.png"))
     plt.close()
-
+    '''
     # --- Save classification report ---
     report = classification_report(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     with open(os.path.join(output_path, f"classification_report_{name}.txt"), "w") as f:
         f.write(report)
+
 
 
 def run_global_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, idx_to_label):

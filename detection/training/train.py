@@ -9,7 +9,7 @@ TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_tes
 LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
-def find_zarr_folder(base_path):
+def find_zarr_or_mrc(base_path):
     zarr_folders = []
     
     # Walk through all subdirectories recursively
@@ -18,21 +18,32 @@ def find_zarr_folder(base_path):
             if d.endswith(".zarr"):
                 zarr_folders.append(os.path.join(root, d))
     
-    if not zarr_folders:
-        raise FileNotFoundError(f"No .zarr folder found in {base_path}")
+    if zarr_folders:
+        # Prefer denoised.zarr if it exists
+        for folder in zarr_folders:
+            if os.path.basename(folder) == "denoised.zarr":
+                return folder
+        # Otherwise, return the first .zarr found
+        return zarr_folders[0]
     
-    # Prefer denoised.zarr if it exists
-    for folder in zarr_folders:
-        if os.path.basename(folder) == "denoised.zarr":
-            return folder
+    # If no .zarr found, look for .mrc files
+    mrc_files = []
+    for root, dirs, files in os.walk(base_path):
+        for f in files:
+            if f.endswith(".mrc"):
+                mrc_files.append(os.path.join(root, f))
     
-    # Otherwise, return the first .zarr found
-    return zarr_folders[0]
+    if not mrc_files:
+        raise FileNotFoundError(f"No .zarr folder or .mrc file found in {base_path}")
+    
+    # Return the first .mrc found
+    return mrc_files[0]
+
     
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):
 
     datasets = ["ExperimentRuns", "tomograms"]
-    model_name = "protein_detection_czii_v5"
+    model_name = "protein_detection_czii_v7"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -64,9 +75,9 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     check = False
 
     #add the zarr file path ending to each path
-    train_paths = [find_zarr_folder(path) for path in train_paths]
-    val_paths = [find_zarr_folder(path) for path in val_paths]
-    test_paths = [find_zarr_folder(path) for path in test_paths]
+    train_paths = [find_zarr_or_mrc(path) for path in train_paths]
+    val_paths = [find_zarr_or_mrc(path) for path in val_paths]
+    test_paths = [find_zarr_or_mrc(path) for path in test_paths]
 
     # TODO do we want n_samples_train and n_samples_val in the supervised training?
     supervised_training(
@@ -79,7 +90,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         patch_shape=patch_shape, batch_size=batch_size,
         check=check,
         lr=1e-4,
-        n_iterations=1e3,
+        n_iterations=5e5,
         out_channels=1,
         augmentations=None,
         eps=1e-5,
