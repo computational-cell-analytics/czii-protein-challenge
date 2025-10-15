@@ -9,6 +9,25 @@ import torch.nn as nn
 from .data_loader import create_data_loader
 from .heatmap_dataset import HeatmapDataset
 
+class CombinedLoss(nn.Module):
+    def __init__(self, heatmap_weight=1.0, flow_weight=0.1):
+        super().__init__()
+        self.heatmap_loss = nn.MSELoss()
+        self.flow_loss = nn.MSELoss()
+        self.heatmap_weight = heatmap_weight
+        self.flow_weight = flow_weight
+
+    def forward(self, pred, target):
+        # split channels: (1 heatmap + 4 flow)
+        pred_heatmap, pred_flow = pred[:, :1], pred[:, 1:]
+        target_heatmap, target_flow = target[:, :1], target[:, 1:]
+
+        l_h = self.heatmap_loss(pred_heatmap, target_heatmap)
+        l_f = self.flow_loss(pred_flow, target_flow)
+
+        total_loss = self.heatmap_weight * l_h + self.flow_weight * l_f
+        return total_loss
+
 
 '''#Julias code ... don't know yet if I need to chage it ...
 def get_in_channels(image_path):
@@ -71,7 +90,7 @@ def supervised_training(
     lr: float = 1e-4,
     n_iterations: int = int(1e5),
     check: bool = False,
-    out_channels: int = 2,
+    out_channels: int = 5,  # <--- 5 channels (1 heatmap + 4 flow) #had out_channels = 2 before adding the stereographic flow
     augmentations: Optional[bool] = False,
     eps: float = 1e-5,
     sigma: int = None,
@@ -143,6 +162,7 @@ def supervised_training(
 
     loss = nn.MSELoss(reduction="mean")
     metric = loss
+    loss_fn = CombinedLoss(heatmap_weight=1.0, flow_weight=0.1)
 
     trainer = torch_em.default_segmentation_trainer(
         name=name,
@@ -154,7 +174,8 @@ def supervised_training(
         log_image_interval=100, # if logger error use logger=None
         compile_model=False,
         save_root=save_root,
-        loss=loss,
+        loss=loss_fn,
         metric=metric,
     )
+
     trainer.fit(n_iterations)

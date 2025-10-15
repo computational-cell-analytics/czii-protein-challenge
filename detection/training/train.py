@@ -42,8 +42,8 @@ def find_zarr_or_mrc(base_path):
     
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):
 
-    datasets = ["ExperimentRuns", "tomograms"]
-    model_name = "protein_detection_czii_v7"
+    datasets = ["ExperimentRuns"]
+    model_name = "protein_detection_czii_v11"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -79,6 +79,10 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     val_paths = [find_zarr_or_mrc(path) for path in val_paths]
     test_paths = [find_zarr_or_mrc(path) for path in test_paths]
 
+    print(f"train_paths {train_paths}")
+    print(f"val_paths{val_paths}")
+    print(f"test_paths {test_paths}")
+    
     # TODO do we want n_samples_train and n_samples_val in the supervised training?
     supervised_training(
         name=model_name,
@@ -90,8 +94,8 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         patch_shape=patch_shape, batch_size=batch_size,
         check=check,
         lr=1e-4,
-        n_iterations=5e5,
-        out_channels=1,
+        n_iterations=1e3,
+        out_channels=5,
         augmentations=None,
         eps=1e-5,
         sigma=None,
