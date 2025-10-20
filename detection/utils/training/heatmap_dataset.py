@@ -179,6 +179,7 @@ class HeatmapDataset(torch.utils.data.Dataset):
         self.sigma = sigma
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
+        self.halo = 10
 
     def __len__(self):
         return self._len
@@ -188,25 +189,46 @@ class HeatmapDataset(torch.utils.data.Dataset):
         return self._ndim
 
     def _sample_bounding_box(self):
+        """
+        Sample a random bounding box, ensuring that a halo can be added
+        without exceeding the image boundaries.
+        """
         if self.sample_shape is None:
+            # Patch shape is full image (or z_ext for z-axis)
             if self.z_ext is None:
                 bb_start = [0] * len(self.shape)
                 patch_shape_for_bb = self.shape
             else:
-                z_diff = self.shape[0] - self.z_ext
+                z_diff = self.shape[0] - self.z_ext - self.halo * 2
                 bb_start = [np.random.randint(0, z_diff) if z_diff > 0 else 0] + [0] * len(self.shape[1:])
                 patch_shape_for_bb = (self.z_ext, *self.shape[1:])
         else:
-            bb_start = [
-                np.random.randint(0, sh - psh) if sh - psh > 0 else 0 for sh, psh in zip(self.shape, self.sample_shape)
-            ]
+            bb_start = []
+            for sh, psh in zip(self.shape, self.sample_shape):
+                max_start = max(0, sh - psh - 2 * self.halo)  # reserve space for halo on both sides
+                start = np.random.randint(0, max_start + 1) if max_start > 0 else 0
+                bb_start.append(start)
             patch_shape_for_bb = self.sample_shape
+
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
+
 
     def _get_desired_raw_and_labels(self):
         bb = self._sample_bounding_box()
-        bb_raw = (slice(None),) + bb if self._with_channels else bb
-        bb_labels = (slice(None),) + bb if self._with_label_channels else bb
+        # Extend the BB with halo
+        if self.halo > 0:
+            bb_halo = []
+            for i, s in enumerate(bb):
+                start = max(0, s.start - self.halo)
+                stop = min(self.shape[i], s.stop + self.halo)
+                bb_halo.append(slice(start, stop))
+            bb_for_loading = tuple(bb_halo)
+        else:
+            bb_for_loading = bb
+
+        # Add channel slices if needed
+        bb_raw = (slice(None),) + bb_for_loading if self._with_channels else bb_for_loading
+        bb_labels = (slice(None),) + bb_for_loading if self._with_label_channels else bb_for_loading
 
         raw = self.raw[bb_raw]
 
@@ -221,35 +243,47 @@ class HeatmapDataset(torch.utils.data.Dataset):
         json_files = [os.path.join(picks_folder, f) for f in os.listdir(picks_folder) if f.endswith(".json")]
         coords, _ = parse_json_files(json_files)
 
-        # Compute the stereographic flow for the sampled patch.
-        # Determine the patch shape (z,y,x) used by the heatmap (heatmap might be channel-first or not)
-        # heatmap coming from get_label likely has shape (Z,Y,X) or (1,Z,Y,X). Normalize:
+        # Compute flow using the halo-extended bounding box
         heatmap_arr = np.asarray(heatmap)
-        if heatmap_arr.ndim == 4:
-            # assume (C,Z,Y,X) or (1,Z,Y,X)
-            # extract spatial shape ignoring channel dimension(s)
-            patch_spatial_shape = heatmap_arr.shape[-3:]
-            heatmap_spatial = heatmap_arr.squeeze(0)  # becomes (Z,Y,X)
-        elif heatmap_arr.ndim == 3:
-            patch_spatial_shape = heatmap_arr.shape
-            heatmap_spatial = heatmap_arr
-        else:
-            # unexpected but attempt fallback
-            patch_spatial_shape = tuple(self.patch_shape) if self.patch_shape is not None else heatmap_arr.shape[-3:]
-            heatmap_spatial = heatmap_arr.reshape(patch_spatial_shape)
+        patch_spatial_shape = heatmap_arr.shape[-3:] if heatmap_arr.ndim >= 3 else tuple(self.patch_shape)
+        spatial_bb = bb_for_loading
+        flow = compute_stereographic_flow(
+            coords, patch_spatial_shape, bb=spatial_bb,
+            sigma=self.sigma if self.sigma is not None else 1.5, grid=(1, 1, 1)
+        )
 
-        # call compute_stereographic_flow with the bounding box corresponding to spatial slices (not channel slice)
-        # The bb returned earlier is spatial slices; in case bb_labels had a leading channel slice, pass the spatial bb.
-        spatial_bb = bb if (len(bb) == 3 and all(isinstance(s, slice) for s in bb)) else tuple(bb[-3:])
+        # Combine heatmap and flow
+        heatmap_channel = heatmap_arr[np.newaxis, ...].astype(np.float32, copy=False)
+        labels_combined = np.concatenate([heatmap_channel, flow], axis=0)  # (1+4, Z, Y, X)
 
-        flow = compute_stereographic_flow(coords, patch_spatial_shape, bb=spatial_bb, sigma=self.sigma if self.sigma is not None else 1.5, grid=(1, 1, 1))
+        # --- Crop out the halo so all outputs match original bounding box ---
+        if self.halo > 0:
+            # Compute slices for cropping the halo
+            slices_crop = tuple(
+                slice(self.halo, dim - self.halo) if dim > 2 * self.halo else slice(None)
+                for dim in labels_combined.shape[-3:]
+            )
 
-        # Combine heatmap and flow into a single labels array:
-        # heatmap -> channel 0, flow channels 1..4
-        # ensure shapes align: heatmap_spatial (Z,Y,X), flow (4,Z,Y,X)
-        # Expand heatmap to single channel first
-        heatmap_channel = heatmap_spatial[np.newaxis, ...].astype(np.float32, copy=False)
-        labels_combined = np.concatenate([heatmap_channel, flow], axis=0)  # shape (1+4, Z, Y, X)
+            # Crop raw
+            if raw.ndim == 4:  # (C, Z, Y, X)
+                raw = raw[:, slices_crop[0], slices_crop[1], slices_crop[2]]
+            else:  # (Z, Y, X)
+                raw = raw[slices_crop[0], slices_crop[1], slices_crop[2]]
+
+            # Crop heatmap
+            if heatmap_arr.ndim == 3:
+                heatmap_arr = heatmap_arr[slices_crop[0], slices_crop[1], slices_crop[2]]
+            elif heatmap_arr.ndim == 4:
+                heatmap_arr = heatmap_arr[:, slices_crop[0], slices_crop[1], slices_crop[2]]
+
+            # Crop flow
+            if flow.ndim == 4:  # (C, Z, Y, X)
+                flow = flow[:, slices_crop[0], slices_crop[1], slices_crop[2]]
+
+            # Crop labels_combined
+            if labels_combined.ndim == 4:  # (C, Z, Y, X)
+                labels_combined = labels_combined[:, slices_crop[0], slices_crop[1], slices_crop[2]]
+
 
         '''viewer = napari.Viewer(title="Patch visualization")
 
@@ -264,6 +298,83 @@ class HeatmapDataset(torch.utils.data.Dataset):
             viewer.add_image(flow[i], name=f"flow_{ch}", colormap="turbo", blending="additive")
 
         napari.run()'''
+
+        '''viewer = napari.Viewer(title="Patch Visualization")
+
+        # --- 1️⃣ Show raw patch ---
+        raw_disp = np.asarray(raw.squeeze())
+        viewer.add_image(
+            raw_disp,
+            name="raw",
+            contrast_limits=(np.percentile(raw_disp, 1), np.percentile(raw_disp, 99)),
+        )
+
+        # --- 2️⃣ Show heatmap ---
+        viewer.add_image(
+            heatmap_arr,
+            name="heatmap",
+            colormap="inferno",
+            blending="additive",
+            opacity=0.6,
+        )
+
+        # --- 3️⃣ Extract flow channels ---
+        # flow has shape (4, Z, Y, X) → [w′, z′, y′, x′]
+        w_map = flow[0]
+        z_flow = flow[1]
+        y_flow = flow[2]
+        x_flow = flow[3]
+
+        # --- 4️⃣ Show w′ as an image ---
+        viewer.add_image(
+            w_map,
+            name="w_prime (confidence)",
+            colormap="magma",
+            blending="additive",
+            opacity=0.6,
+        )
+
+        # --- 5️⃣ Prepare vectors for Napari ---
+        downsample = 4  # adjust arrow density
+        Z, Y, X = w_map.shape
+
+        # Grid of voxel centers (downsampled)
+        z_coords, y_coords, x_coords = np.mgrid[
+            0:Z:downsample, 0:Y:downsample, 0:X:downsample
+        ]
+        positions = np.stack([z_coords, y_coords, x_coords], axis=-1).reshape(-1, 3)
+
+        # Direction vectors (downsampled)
+        vectors = np.stack(
+            [
+                z_flow[::downsample, ::downsample, ::downsample],
+                y_flow[::downsample, ::downsample, ::downsample],
+                x_flow[::downsample, ::downsample, ::downsample],
+            ],
+            axis=-1,
+        ).reshape(-1, 3)
+
+        # Confidence weights (downsampled)
+        w_local = w_map[::downsample, ::downsample, ::downsample].reshape(-1, 1)
+
+        # --- 6️⃣ Normalize vectors to unit length and scale by w′ ---
+        magnitudes = np.linalg.norm(vectors, axis=1, keepdims=True)
+        # avoid division by zero
+        magnitudes[magnitudes == 0] = 1e-8
+        vectors_normalized = vectors / magnitudes
+        vectors_weighted = vectors_normalized * w_local  # arrow length now controlled by w′
+
+        # --- 7️⃣ Add the weighted vectors to Napari ---
+        viewer.add_vectors(
+            data=np.stack([positions, vectors_weighted], axis=1),  # (N, 2, 3)
+            name="stereographic_flow (normalized + w'-scaled)",
+            edge_width=0.4,
+            length=3.0,          # global visual scaling factor
+            opacity=0.8,
+        )
+
+        napari.run()'''
+
 
         return raw, labels_combined
 
@@ -330,6 +441,7 @@ class HeatmapDataset(torch.utils.data.Dataset):
         #TODO what is right?
         labels = ensure_tensor_with_channels(labels, ndim=self._ndim, dtype=self.label_dtype)
         #labels = torch.as_tensor(labels, dtype=self.label_dtype)
+
 
         '''visualize = True  # set to True to open Napari
         if visualize:

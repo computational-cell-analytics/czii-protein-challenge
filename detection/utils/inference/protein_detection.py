@@ -4,16 +4,24 @@ from .gridsearch import gridsearch
 
 def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO do this properly
     """
-    Detects local maxima and estimates sizes of Gaussians in a 3D heatmap.
+    Detect protein coordinates from a heatmap and adjust them using stereographic flow predictions.
 
-    Parameters:
-        heatmap (np.array): A 3D numpy array representing the heatmap.
+    Args:
+        heatmap (np.ndarray): Tensor with shape (5, D, H, W) containing:
+                              [0] heatmap,
+                              [1] w' (stereographic scale),
+                              [2] z' (flow z),
+                              [3] y' (flow y),
+                              [4] x' (flow x)
+        json_val_path (str): Path to validation JSON for threshold optimization.
+        model_path (str): Path to model for gridsearch.
+        threshold (float, optional): Detection threshold. If None, determined via gridsearch.
 
     Returns:
-        list of dict: A list of dictionaries with keys:
-            - 'coordinates': Tuple of (z, y, x) for the local maxima
-            - 'size': Estimated size of the Gaussian (sigma equivalent)
+        pred_coords (list): Adjusted coordinates [[z, y, x], ...].
+        threshold (float): Used detection threshold.
     """
+
     if threshold is None:
         threshold = gridsearch(json_val_path, model_path) 
     #smalles protein structure: "beta-amylase": 33.27
@@ -24,7 +32,34 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO
     '''pred_coords = blob_log(heatmap, min_sigma=33.27*adj_factor, max_sigma=109.02*adj_factor, threshold=threshold) 
     pred_coords = pred_coords[:, 1:-1]'''
 
-    pred_coords = peak_local_max(heatmap[0], min_distance=int(33.27*adj_factor *0.9), threshold_abs=threshold)
+    # Find peaks in heatmap
+    pred_coords = peak_local_max(
+        heatmap[0],
+        min_distance=int(33.27 * adj_factor * 0.9),
+        threshold_abs=threshold
+    )
+
+    # --- Apply stereographic flow correction ---
+    # Extract flow channels
+    flow_w = heatmap[1]  # stereographic scaling (if needed later)
+    flow_z = heatmap[2]
+    flow_y = heatmap[3]
+    flow_x = heatmap[4]
+
+    # Adjust coordinates using predicted local flow
+    adjusted_coords = []
+    for z, y, x in pred_coords:
+        dz = flow_z[z, y, x]
+        dy = flow_y[z, y, x]
+        dx = flow_x[z, y, x]
+
+        # Optionally apply stereographic scaling (if relevant)
+        # In Spotiflow, coordinates are typically adjusted directly by the flow values
+        adj_z = z + dz
+        adj_y = y + dy
+        adj_x = x + dx
+
+        adjusted_coords.append([float(adj_z), float(adj_y), float(adj_x)])
 
 
     #TODO calculate size of each gaussians and save it in detections
@@ -33,4 +68,4 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO
         'size': sizes
     })
 '''
-    return pred_coords.tolist(), threshold
+    return adjusted_coords, threshold

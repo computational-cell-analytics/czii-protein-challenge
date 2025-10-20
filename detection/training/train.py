@@ -5,9 +5,9 @@ import argparse
 from detection.utils import get_paths  # noqa
 from detection.utils import supervised_training  # noqa
 
-TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
-LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
-OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
+TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/raw" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
+LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/labels" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
+OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/training" #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
 def find_zarr_or_mrc(base_path):
     zarr_folders = []
@@ -43,7 +43,7 @@ def find_zarr_or_mrc(base_path):
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):
 
     datasets = ["ExperimentRuns"]
-    model_name = "protein_detection_czii_v11"
+    model_name = "protein_detection_czii_v12"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -103,7 +103,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         upper_bound=None,
         test_paths=test_paths,
         test_label_paths=test_label_paths,
-        save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
+        save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models", #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/models", #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
     )
 
 
