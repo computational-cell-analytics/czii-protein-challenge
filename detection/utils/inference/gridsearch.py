@@ -12,8 +12,8 @@ from detection.data_processing.create_heatmap import parse_json_files
 import numpy as np
 
 #TODO Do I want to make this more flexible??
-TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
-LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
+TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
+LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
 DEFAULT_JSON = "/mnt/lustre-emmy-hdd/usr/u12095/cryo-et/czii_challenge/training/protein_detection_czii_v4/split-ExperimentRuns.json"
 
 
@@ -100,8 +100,9 @@ def gridsearch(json_val_path, model_path):
 
     for val_path in val_list:
 
-        image_path = get_full_image_path(json_val_path= DEFAULT_JSON, val_path=val_path)
-        label_path = get_full_label_path(json_val_path= DEFAULT_JSON, val_path=val_path)
+        image_path = get_full_image_path(json_val_path= json_val_path, val_path=val_path)
+        label_path = get_full_label_path(json_val_path= json_val_path, val_path=val_path)
+        print(f"double check image path {image_path} and label path {label_path}")
 
         tiling = parse_tiling(tile_shape=None, halo=None) #TODO implement tiling and halo choices
 

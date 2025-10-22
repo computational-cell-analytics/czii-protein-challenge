@@ -287,9 +287,6 @@ def get_single_subtomogram(
     Load a single subtomogram on demand from a tomogram file.
     """
 
-    # ⚠️ If get_volume loads the *whole* tomogram, 
-    # you may still use a lot of memory.
-    # If the data is in Zarr, you can slice directly:
     raw_volume = get_volume(path)  # (D, H, W)
 
     subs, _, filtered_targets = extract_subtomograms(

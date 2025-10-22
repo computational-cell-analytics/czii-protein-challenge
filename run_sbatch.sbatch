@@ -10,5 +10,5 @@
 #/scratch/usr/nimsmuth/mambaforge/envs/synapse-net
 #/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-ne
 /mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-net/bin/python /user/muth9/u12095/czii-protein-challenge/detection/evaluation/run_evaluation.py \
- -p /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/detections/protein_detection_czii_v12/ \
- -l /scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/ExperimentRuns -m detection_v12_with_adjustement
+ -p /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/detections/protein_detection_czii_v13/public_test_dataset \
+ -l /scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth -m detection_v13_public_test_dataset

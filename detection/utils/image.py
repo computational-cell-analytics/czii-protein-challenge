@@ -1,10 +1,10 @@
 import os
 from typing import Optional, Sequence, Union
 
-import imageio.v3 as imageio
 import numpy as np
 from elf.io import open_file
 from numpy.typing import ArrayLike
+import mrcfile
 
 try:
     import tifffile
@@ -31,6 +31,7 @@ def supports_memmap(image_path):
 
 def load_image(image_path, memmap=True):
 
+    print(f"image_path {image_path}")
     if supports_memmap(image_path) and memmap:
         return tifffile.memmap(image_path, mode="r")
     elif tifffile is not None and os.path.splitext(image_path)[1].lower() in TIF_EXTS:
@@ -43,7 +44,10 @@ def load_image(image_path, memmap=True):
         image = sitk.ReadImage(image_path)
         return sitk.GetArrayFromImage(image)
     else:
-        return imageio.imread(image_path)
+        
+        with mrcfile.open(image_path, permissive=True) as mrc:
+            return mrc.data
+
 
 
 class MultiDatasetWrapper:
