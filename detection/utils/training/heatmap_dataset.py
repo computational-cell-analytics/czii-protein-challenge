@@ -41,6 +41,7 @@ def compute_stereographic_flow(
         Array with shape (4, Z, Y, X) and dtype float32 where the channel order is
         [w', z', y', x'] (same as spotiflow).
     """
+    print(f"using sigma of {sigma} for the stereographic flow")
     # coords may be empty
     if coords is None:
         coords = np.zeros((0, 3), dtype=np.float32)

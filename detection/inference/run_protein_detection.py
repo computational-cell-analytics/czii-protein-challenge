@@ -101,9 +101,18 @@ def process_folder(args):
 
     pbar = tqdm(input_files, desc="Run protein detection")
     for input_path in pbar:
+        input_name = os.path.basename(input_path)
+        output_json = os.path.join(args.output_path, f"{input_name}_protein_detections.json")
+
+        # Skip if already processed
+        if os.path.exists(output_json):
+            print(f"Skipping {input_name} — results already exist.")
+            continue
+
         threshold = run_protein_detection(
             input_path, args.output_path, args.model_path, args.json_val_path, threshold=threshold
         )
+
 
 def main():
     parser = argparse.ArgumentParser(description="Segment vesicles in EM tomograms.")
