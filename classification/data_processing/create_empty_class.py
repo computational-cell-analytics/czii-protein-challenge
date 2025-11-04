@@ -122,10 +122,15 @@ def create_no_class_json(input_dir, picks_dir, zarr_=False, n_points=50):
 
     # Collect all JSON files except no_class
     json_files = [str(p) for p in Path(picks_dir).glob("*.json") if not p.name.startswith("no_class")]
-    existing_coords = parse_json_files(json_files)
+    existing_coords = parse_json_files(json_files)  # Å → nm
 
-    # Generate new valid no_class points
-    no_class_points = generate_no_class_points(shape, existing_coords, min_distance=55, n_points=n_points)
+    # Generate new points in nm
+    no_class_points = generate_no_class_points(
+        shape,
+        existing_coords,
+        min_distance=55,
+        n_points=n_points
+    )
 
     # Build JSON data structure
     data = {
@@ -138,9 +143,14 @@ def create_no_class_json(input_dir, picks_dir, zarr_=False, n_points=50):
         "points": []
     }
 
-    for i, (z, y, x) in enumerate(no_class_points):
+    #Convert nm → Å before saving
+    for i, (z_nm, y_nm, x_nm) in enumerate(no_class_points):
         data["points"].append({
-            "location": {"x": float(x), "y": float(y), "z": float(z)},
+            "location": {
+                "x": float(x_nm * 10),
+                "y": float(y_nm * 10),
+                "z": float(z_nm * 10),
+            },
             "transformation_": np.eye(4).tolist(),
             "instance_id": i
         })
@@ -151,6 +161,7 @@ def create_no_class_json(input_dir, picks_dir, zarr_=False, n_points=50):
         json.dump(data, f, indent=4)
 
     print(f"Overwrote {output_path}")
+
 
 def process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=50):
     """Iterate through all tomograms and regenerate no_class.json files."""

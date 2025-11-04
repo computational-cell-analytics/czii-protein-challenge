@@ -146,6 +146,10 @@ def classification_training(
 
     model = get_3d_model(EfficientNet=False,in_channels=in_channels, out_channels=out_channels)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    print(f"\nModel on device: {device}")
+
     # Set the default loss and metric (if no values where passed).
     loss = torch.nn.CrossEntropyLoss() if loss is None else loss
     metric = ClassificationMetric() if metric is None else metric
