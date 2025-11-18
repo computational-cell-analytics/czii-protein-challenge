@@ -55,11 +55,11 @@ def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
 def get_model(model_path, device, EfficientNet=False):
     if EfficientNet:
         from external.efficientnet3d.efficientnet_pytorch_3d import EfficientNet3D
-        model = EfficientNet3D.from_name("efficientnet-b0", override_params={'num_classes': 6}, in_channels=1)
+        model = EfficientNet3D.from_name("efficientnet-b0", override_params={'num_classes': 7}, in_channels=1)
     else:
         model = resnet3d_18(
             in_channels=1,
-            out_channels=6
+            out_channels=7
         )
         
         # Replace conv1 and maxpool

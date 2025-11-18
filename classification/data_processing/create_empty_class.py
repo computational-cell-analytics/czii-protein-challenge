@@ -175,8 +175,8 @@ def process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=50):
             create_no_class_json(tomo_dir, picks_dir, zarr_=zarr_, n_points=n_points)
 
 if __name__ == "__main__":
-    tomo_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/ExperimentRuns"
-    gt_root = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/ExperimentRuns"
+    tomo_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/tomograms"
+    gt_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/"
 
     # Set zarr_=True if your data is in .zarr format
     process_all_tomograms(tomo_root, gt_root, zarr_=True, n_points=25)

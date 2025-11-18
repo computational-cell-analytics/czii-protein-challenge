@@ -6,7 +6,7 @@ from detection.utils import get_paths  # noqa
 from detection.utils import supervised_training  # noqa
 
 TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/raw" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
-LABEL_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/labels" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
+LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/labels" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/training" #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
 def find_zarr_or_mrc(base_path):

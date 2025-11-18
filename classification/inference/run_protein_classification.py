@@ -58,6 +58,7 @@ def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
         
         # Append "0" subfolder
         zarr_path = os.path.join(zarr_dir, "0")
+        print(f"Using volume path: {zarr_path}")
         if not os.path.exists(zarr_path):
             raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
         
@@ -179,7 +180,7 @@ def run_protein_classification_with_labels(
     os.makedirs(output_path, exist_ok=True)
 
     # Load int→label mapping
-    with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v3/idx_to_label.json", "r") as f:
+    with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
         idx_to_label = json.load(f)
 
     all_sample_ids, all_preds, all_probs, all_truths = [], [], [], []
@@ -291,7 +292,7 @@ def main():
             global_probs.extend(probs)
 
         # --- Global evaluation ---
-        with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v3/idx_to_label.json", "r") as f:
+        with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
             idx_to_label = json.load(f)
         run_global_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, idx_to_label)
 
