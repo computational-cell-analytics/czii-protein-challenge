@@ -20,6 +20,9 @@ from classification.data_processing import extract_subtomograms
 from classification.utils import protein_classification
 from classification.training import get_coords_and_targets
 
+from classification.inference.visual_checks import save_subtomo_view, save_tomo_match_overview, save_examples_csv, sample_and_save_montages_by_category
+
+
 def load_detection_predictions(pred_path):
     with open(pred_path, "r") as f:
         points = json.load(f)
@@ -193,11 +196,11 @@ def preprocess_tomo_with_predictions(
         raw_volume = get_volume(tomo_path, zarr_=True)
         coords = coords.astype(int)
         # Convert from (x, y, z) to (z, y, x)
-        coords = [(int(c[2]), int(c[1]), int(c[0])) for c in coords]
+        coords = [(int(c[0]), int(c[1]), int(c[2])) for c in coords]
 
         subtomograms, valid_coords, targets = extract_subtomograms(raw_volume, coords, max_extent, targets=targets)
 
-        for cube, (x, y, z), target in zip(subtomograms, valid_coords, targets):
+        for cube, (z, y, x), target in zip(subtomograms, valid_coords, targets):
             filename = f"{experiment_name}_x{x}_y{y}_z{z}.h5"
             filepath = os.path.join(subtomo_output, filename)
 
@@ -320,6 +323,50 @@ def run_protein_classification_with_labels(
         # Full evaluation on all subtomograms
         run_full_evaluation(all_sample_ids, all_truth_labels, all_pred_labels, all_probs, output_path, tomo_name, idx_to_label, num_unmatched)
 
+    # set up visualization dir
+    vis_dir = os.path.join(output_path, "visual_checks")
+    os.makedirs(vis_dir, exist_ok=True)
+
+    # per-sample visualization and CSV records (do for the current batch)
+    batch_records = []
+    for sid, cube, pred_int, prob_vec, true_lbl in zip(sample_ids, cubes, preds, probs, truths_batch):
+
+        # Decide top probability and label (if probs is vector)
+        if hasattr(prob_vec, "__len__") and len(prob_vec) > 1:
+            top_idx = int(np.argmax(prob_vec))
+            top_prob = float(np.max(prob_vec))
+        else:
+            top_idx = int(pred_int)
+            top_prob = float(prob_vec) if not hasattr(prob_vec, "__len__") else float(prob_vec[0])
+
+        # translate pred_int to label string using idx_to_label if available outside this function
+        pred_label_str = idx_to_label[str(pred_int)] if 'idx_to_label' in globals() and str(pred_int) in idx_to_label else str(pred_int)
+        true_label_str = idx_to_label[str(true_lbl)] if 'idx_to_label' in globals() and str(true_lbl) in idx_to_label else str(true_lbl)
+
+        # build sample-specific viz path
+        viz_path = os.path.join(vis_dir, f"{sid}_viz.png")
+        save_subtomo_view(cube, viz_path, sid, pred_label_str, true_label_str, pred_prob=top_prob)
+
+        batch_records.append({
+            "sample_id": sid,
+            "h5_path": sid,  # already your sample id includes filename; change to file path if needed
+            "pred_label": pred_label_str,
+            "true_label": true_label_str,
+            "prob": top_prob,
+            "visualization": viz_path
+        })
+
+    # write/append CSV for this batch
+    csv_path = os.path.join(vis_dir, "examples_index.csv")
+    # load existing if any and append
+    if os.path.exists(csv_path):
+        df_existing = pd.read_csv(csv_path)
+        df_new = pd.DataFrame(batch_records)
+        pd.concat([df_existing, df_new], ignore_index=True).to_csv(csv_path, index=False)
+    else:
+        pd.DataFrame(batch_records).to_csv(csv_path, index=False)
+
+
     return all_sample_ids, all_truth_labels, all_pred_labels, all_probs
 
 
@@ -413,12 +460,11 @@ def main():
 
     else:
         tomo_paths = [args.input_path]
-        tomoID = os.path.basename(args.input_path)
 
         print("Extracting subtomograms with labels...")
         subtomo_files, labels, num_unmatched = preprocess_tomo_with_predictions(
             tomo_paths,
-            pred_path = os.path.join(args.pred_coords, f"{tomoID}_protein_detections.json"),
+            pred_path = args.pred_coords,
             label_path=os.path.join(args.labels_root, "Picks"),
             max_extent=args.max_extent,
             subtomo_output=args.subtomo_output
