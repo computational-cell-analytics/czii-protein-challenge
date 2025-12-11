@@ -37,7 +37,7 @@ def get_normalization():
 def train(testset=True, model_name= "protein_classification"):
     in_channels=1
     n_classes = 7
-    datasets = ["ExperimentRuns_faket"]
+    datasets = ["ExperimentRuns", "ExperimentRuns_faket_snr_1_2"]
     #model_name = "protein_classification_czii_v11"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
@@ -66,7 +66,7 @@ def train(testset=True, model_name= "protein_classification"):
         lr=1e-4,
         logger=ClassificationLogger,
         trainer_class=ClassificationTrainer,
-        n_iterations=1e3,
+        n_iterations=1.5e3,
         out_channels=n_classes,
         in_channels=in_channels,
         loss=torch.nn.CrossEntropyLoss(),
@@ -88,7 +88,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v23"
+    model_name = "protein_classification_czii_v24"
     train(args.testset, model_name)
     #mixed_train(args.testset, model_name)
 

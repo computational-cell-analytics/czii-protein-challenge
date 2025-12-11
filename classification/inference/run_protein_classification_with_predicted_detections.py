@@ -11,6 +11,8 @@ from sklearn.manifold import TSNE
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 import seaborn as sns
 import random
+import csv
+from collections import defaultdict, deque
 
 from typing import List, Tuple
 from scipy.spatial.distance import cdist
@@ -135,11 +137,7 @@ def match_preds_with_labels(preds, label_path, no_class_label="no_class"):
     ]
     from detection.data_processing.create_heatmap import parse_json_files
     label_coords, protein_types = parse_json_files(json_files)
-    #TODO do I need this?
-    '''
-    # Convert to integers for array slicing
-    label_coords = [(int(round(x)), int(round(y)), int(round(z))) for x, y, z in label_coords]
-    '''
+
     label_coords = np.array(label_coords)
     protein_types = np.array(protein_types)
 
@@ -151,21 +149,65 @@ def match_preds_with_labels(preds, label_path, no_class_label="no_class"):
     #Run matching 
     matched_idx_pred, matched_idx_gt = match_predictions_to_labels(preds, real_gt_coords)
 
-    #create arrays for final output
-    num_preds = len(preds)
-    assigned_labels = [no_class_label] * num_preds   # default label for all predictions
-    matched_coords = [preds[i] for i in range(num_preds)]  # keep all preds
-    matched_coords = np.round(matched_coords).astype(int)
+    filter = False
+    match_distance=45
+    if filter:
+        # Compute nearest GT distance for each pred
+        if len(real_gt_coords) > 0:
+            dists = cdist(preds, real_gt_coords).min(axis=1)
+        else:
+            dists = np.full(len(preds), np.inf)
 
-    # assign matched labels
-    for p_idx, gt_idx in zip(matched_idx_pred, matched_idx_gt):
-        assigned_labels[p_idx] = real_gt_labels[gt_idx]
+        dists = np.array(dists)
 
+        is_matched = np.zeros(len(preds), dtype=bool)
+        is_matched[matched_idx_pred] = True
 
-    #Count predictions that were not matched
-    num_unmatched_true = sum(1 for lbl in assigned_labels if lbl == no_class_label)
+        #filter matched preds & preds with no GT within 45
+        keep_mask = is_matched | (dists >= match_distance)
 
-    return matched_coords, assigned_labels, num_unmatched_true
+        preds = np.array(preds)[keep_mask]
+        dists = dists[keep_mask]
+
+        #labels: matched GT label or no_class
+        assigned_labels = np.array([no_class_label] * len(preds), dtype=object)
+
+        old_to_new = {old: new for new, old in enumerate(np.where(keep_mask)[0])}
+
+        for old_p, old_gt in zip(matched_idx_pred, matched_idx_gt):
+            if old_p in old_to_new:
+                new_p = old_to_new[old_p]
+                assigned_labels[new_p] = real_gt_labels[old_gt]
+
+        num_unmatched = np.sum(assigned_labels == no_class_label)
+
+        #integer coords
+        coords = np.round(preds).astype(int)
+
+        return coords, assigned_labels.tolist(), num_unmatched, dists.tolist()
+    
+    else:
+        #create arrays for final output
+        num_preds = len(preds)
+        assigned_labels = [no_class_label] * num_preds   # default label for all predictions
+        matched_coords = [preds[i] for i in range(num_preds)]  # keep all preds
+        matched_coords = np.round(matched_coords).astype(int)
+
+        # assign matched labels
+        for p_idx, gt_idx in zip(matched_idx_pred, matched_idx_gt):
+            assigned_labels[p_idx] = real_gt_labels[gt_idx]
+
+        # distances from every pred to nearest real GT point
+        if len(real_gt_coords) > 0:
+            dists = cdist(preds, real_gt_coords).min(axis=1)
+        else:
+            dists = np.full(num_preds, np.inf)
+
+        #Count predictions that were not matched
+        num_unmatched_true = sum(1 for lbl in assigned_labels if lbl == no_class_label)
+
+        return matched_coords, assigned_labels, num_unmatched_true, dists
+
 
 def preprocess_tomo_with_predictions(
     tomo_paths: List[str],
@@ -173,33 +215,79 @@ def preprocess_tomo_with_predictions(
     label_path: str,
     max_extent: int,
     subtomo_output: str
-) -> Tuple[List[str], List[str]]:
+) -> Tuple[List[str], List[str], int, dict]:
     """
     Extract subtomograms at labeled coordinates and save them as .h5 files.
 
     Returns:
         file_paths: list of .h5 file paths
         labels: list of corresponding ground-truth labels (one per file)
+        num_unmatched: total count of no_class assignments (global)
+        unmatched_info: dict per tomogram
     """
-    # Load predictions
-    preds = load_detection_predictions(pred_path)
-    # Match to GT
-    coords, targets, num_unmatched = match_preds_with_labels(preds, label_path)
+    # Load predictions and match to GT (global lists)
+    preds_global = load_detection_predictions(pred_path)          # shape (P,3)
+    coords_global, targets_global, num_unmatched, nearest_gt_distances = match_preds_with_labels(preds_global, label_path)
+
+    # Ensure arrays
+    preds_global = np.array(preds_global)
+    coords_global = np.round(np.array(coords_global)).astype(int)  # integer coords aligned to preds
+    nearest_gt_distances = np.array(nearest_gt_distances)
+
+    # Build mapping from coord tuple -> queue of indices in the global predictions array.
+    coord_to_indices = defaultdict(deque)
+    for idx, c in enumerate(coords_global):
+        coord_to_indices[(int(c[0]), int(c[1]), int(c[2]))].append(idx)
 
     os.makedirs(subtomo_output, exist_ok=True)
 
     file_paths = []
     labels = []
 
+    # Store unmatched pred data per tomogram
+    unmatched_info = {}
+
     for tomo_path in tomo_paths:
         experiment_name = os.path.basename(tomo_path)
         raw_volume = get_volume(tomo_path, zarr_=True)
-        coords = coords.astype(int)
+
         # Convert from (x, y, z) to (z, y, x)
-        coords = [(int(c[0]), int(c[1]), int(c[2])) for c in coords]
+        coords_for_extract = [(int(c[0]), int(c[1]), int(c[2])) for c in coords_global]
 
-        subtomograms, valid_coords, targets = extract_subtomograms(raw_volume, coords, max_extent, targets=targets)
 
+        # extract subtomograms: it will return only those coords that are valid in this tomo
+        subtomograms, valid_coords, targets = extract_subtomograms(raw_volume, coords_for_extract, max_extent, targets=targets_global)
+
+
+        # Map valid_coords back to their indices in the global predictions (using the deque)
+        indices_in_global = []
+        for vc in valid_coords:
+            if vc in coord_to_indices and coord_to_indices[vc]:
+                indices_in_global.append(coord_to_indices[vc].popleft())
+            else:
+                # If there's no mapping, append None (shouldn't usually happen)
+                indices_in_global.append(None)
+
+        #per-valid distances aligned with valid_coords order
+        per_valid_distances = []
+        for idx in indices_in_global:
+            if idx is None:
+                per_valid_distances.append(np.inf)
+            else:
+                per_valid_distances.append(float(nearest_gt_distances[idx]))
+        per_valid_distances = np.array(per_valid_distances)
+
+        #unmatched point info for this tomogram
+        unmatched_mask = np.array(targets) == "no_class"
+        unmatched_coords = np.array(valid_coords)[unmatched_mask]
+        unmatched_distances = per_valid_distances[unmatched_mask]
+
+        unmatched_info[experiment_name] = {
+            "coords": unmatched_coords.tolist(),
+            "distances": unmatched_distances.tolist(),
+        }
+
+        # Save subtomograms and labels (valid_coords are (z,y,x) returned by extract_subtomograms)
         for cube, (z, y, x), target in zip(subtomograms, valid_coords, targets):
             filename = f"{experiment_name}_x{x}_y{y}_z{z}.h5"
             filepath = os.path.join(subtomo_output, filename)
@@ -210,11 +298,58 @@ def preprocess_tomo_with_predictions(
             file_paths.append(filepath)
             labels.append(target)
 
-    return file_paths, labels, num_unmatched
+    return file_paths, labels, num_unmatched, unmatched_info
 
 
-def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label, num_unmatched):
-    # --- Save confusion matrix (raw counts) ---
+def summarize_distance_bins(distances):
+    """
+    distances: 1D iterable of floats
+    
+    Returns a dict with counts for fixed distance ranges.
+    """
+    bins = {
+        "0-5": 0,
+        "5-10": 0,
+        "10-15": 0,
+        "15-20": 0,
+        "20-25": 0,
+        "25-30": 0,
+        "30-35": 0,
+        "35-40": 0,
+        "40-45": 0,
+        "45-50": 0,
+        ">50": 0
+    }
+
+    for d in distances:
+        if d < 5:
+            bins["0-5"] += 1
+        elif d < 10:
+            bins["5-10"] += 1
+        elif d < 15:
+            bins["10-15"] += 1
+        elif d < 20:
+            bins["15-20"] += 1
+        elif d < 25:
+            bins["20-25"] += 1
+        elif d < 30:
+            bins["25-30"] += 1
+        elif d < 35:
+            bins["30-35"] += 1
+        elif d < 40:
+            bins["35-40"] += 1
+        elif d < 45:
+            bins["40-45"] += 1
+        elif d < 50:
+            bins["45-50"] += 1
+        else:
+            bins[">50"] += 1
+
+    return bins
+
+
+def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label, num_unmatched, unmatched_info=None):
+    # Save confusion matrix (raw counts)
     cm = confusion_matrix(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt="d", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues")
@@ -225,7 +360,7 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.savefig(os.path.join(output_path, f"confusion_matrix_{name}.png"))
     plt.close()
 
-    # --- Save confusion matrix (normalized: 0-1) ---
+    # Save confusion matrix (normalized: 0-1)
     cm_norm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm_norm, annot=True, fmt=".2f", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues", vmin=0, vmax=1)
@@ -236,7 +371,7 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.savefig(os.path.join(output_path, f"confusion_matrix_normalized_{name}.png"))
     plt.close()
     '''
-    # --- Save results as list (CSV) ---
+    # Save results as list (CSV) 
     results_df = pd.DataFrame({
         "sample_id": sample_ids,
         "truth": truth_labels,
@@ -244,7 +379,7 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     })
     results_df.to_csv(os.path.join(output_path, f"classification_results_{name}.csv"), index=False)
 
-    # --- Save scatter plot of embeddings (t-SNE of probs) ---
+    # Save scatter plot of embeddings (t-SNE of probs)
     tsne = TSNE(n_components=2, random_state=42)
     probs_2d = tsne.fit_transform(np.array(probs))
 
@@ -259,7 +394,7 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.savefig(os.path.join(output_path, f"tsne_scatter_{name}.png"))
     plt.close()
     '''
-    # --- Save classification report ---
+    # Save classification report 
     report = classification_report(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     with open(os.path.join(output_path, f"classification_report_{name}.txt"), "w") as f:
         f.write(report)
@@ -273,9 +408,38 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
         f.write(f"{name},{len(sample_ids)+num_unmatched},{len(sample_ids)},{num_unmatched}\n")
 
 
+    if unmatched_info:
+        # Save unmatched_info per tomogram 
+        # Collect global distances
+        global_distances = []
 
-def run_global_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, idx_to_label, num_unmatched):
-    run_full_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, "ALL", idx_to_label, num_unmatched)
+        per_tomo_summary = {}
+        for tomo_name, info in unmatched_info.items():
+            dists = info["distances"]
+            summary = summarize_distance_bins(dists)
+            per_tomo_summary[tomo_name] = summary
+            global_distances.extend(dists)
+
+        # Global summary
+        global_summary = summarize_distance_bins(global_distances)
+
+        #save distance summary
+        json_path = os.path.join(output_path, f"distance_summary_{name}.json")
+        with open(json_path, "w") as f:
+            json.dump(
+                {
+                    "per_tomogram": per_tomo_summary,
+                    "global": global_summary
+                },
+                f,
+                indent=4
+            )
+
+
+
+
+def run_global_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, idx_to_label, num_unmatched, unmatched_info):
+    run_full_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, "ALL", idx_to_label, num_unmatched, unmatched_info)
 
 
 def run_protein_classification_with_labels(
@@ -286,7 +450,8 @@ def run_protein_classification_with_labels(
     tomo_name,
     batch_size=16,
     save_full_results=True,
-    num_unmatched=None
+    num_unmatched=None,
+    unmatched_info=None
 ):
     os.makedirs(output_path, exist_ok=True)
 
@@ -321,7 +486,7 @@ def run_protein_classification_with_labels(
 
     if save_full_results:
         # Full evaluation on all subtomograms
-        run_full_evaluation(all_sample_ids, all_truth_labels, all_pred_labels, all_probs, output_path, tomo_name, idx_to_label, num_unmatched)
+        run_full_evaluation(all_sample_ids, all_truth_labels, all_pred_labels, all_probs, output_path, tomo_name, idx_to_label, num_unmatched, unmatched_info)
 
     # set up visualization dir
     vis_dir = os.path.join(output_path, "visual_checks")
@@ -418,13 +583,14 @@ def main():
         eval_tomos = set(random.sample(tomogram_folders, n_eval))
 
         global_num_unmatched=0
+        global_unmatched_info = {}
 
         for subfolder_path in tomogram_folders:
             tomo_paths = [subfolder_path]
             tomoID = os.path.basename(subfolder_path)
 
             print(f"Extracting subtomograms with labels from {subfolder_path}...")
-            subtomo_files, labels, num_unmatched = preprocess_tomo_with_predictions(
+            subtomo_files, labels, num_unmatched, unmatched_info = preprocess_tomo_with_predictions(
                 tomo_paths,
                 pred_path = os.path.join(args.pred_coords, f"{tomoID}_protein_detections.json"),
                 label_path=os.path.join(args.labels_root, tomoID, "Picks"),
@@ -444,7 +610,8 @@ def main():
                 tomo_name=tomo_name,
                 batch_size=args.batch_size,
                 save_full_results=(subfolder_path in eval_tomos),  # only full eval for 10% tomograms
-                num_unmatched= num_unmatched
+                num_unmatched= num_unmatched,
+                unmatched_info= None
             )
 
             global_ids.extend(sample_ids)
@@ -452,17 +619,18 @@ def main():
             global_preds.extend(preds)
             global_probs.extend(probs)
             global_num_unmatched+=num_unmatched
+            global_unmatched_info.update(unmatched_info)
 
-        # --- Global evaluation ---
+        #Global evaluation
         with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
             idx_to_label = json.load(f)
-        run_global_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, idx_to_label, global_num_unmatched)
+        run_global_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, idx_to_label, global_num_unmatched, global_unmatched_info)
 
     else:
         tomo_paths = [args.input_path]
 
         print("Extracting subtomograms with labels...")
-        subtomo_files, labels, num_unmatched = preprocess_tomo_with_predictions(
+        subtomo_files, labels, num_unmatched, unmatched_info = preprocess_tomo_with_predictions(
             tomo_paths,
             pred_path = args.pred_coords,
             label_path=os.path.join(args.labels_root, "Picks"),
@@ -482,7 +650,8 @@ def main():
             tomo_name=tomo_name,
             batch_size=args.batch_size,
             save_full_results=True,  # full evaluation in single mode,
-            num_unmatched=num_unmatched
+            num_unmatched=num_unmatched,
+            unmatched_info=unmatched_info
         )
 
     print("Finished classification with label evaluation!")
