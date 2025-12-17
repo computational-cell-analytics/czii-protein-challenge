@@ -6,6 +6,10 @@ from skimage.transform import resize
 from itertools import chain
 from classification.training import get_coords_and_targets, get_single_subtomogram, get_volume
 
+import os
+import h5py
+from torch.utils.data import get_worker_info
+
 class ClassificationDataset(torch.utils.data.Dataset):
     """
     Dataset for classification training using lazy subtomogram extraction.
@@ -84,28 +88,55 @@ class ClassificationDataset(torch.utils.data.Dataset):
                 label,
             )
         except (IndexError, ValueError):
-            # sample failed, pick a random other sample
             import random
             new_index = random.randint(0, len(self) - 1)
             return self[new_index]
 
-        # Normalization
+        #Normalization
         if self.normalization is not None:
             x = self.normalization(x)
 
-        # Resize
+        #Resize
         if self.image_shape is not None:
             x = self._resize(x)
-
-        # Augmentation
-        if self.augmentation is not None:
-            _shape = x.shape
-            x = self.augmentation(x)[0][0]
-            assert x.shape == _shape
-
-        # Convert to tensors
+        
+        #Convert to tensors
         if not isinstance(x, torch.Tensor):
             x = torch.tensor(x, dtype=torch.float32)
+        
+        #Augmentation
+        if self.augmentation is not None:
+            _shape = x.shape
+            x, aug_info = self.augmentation(x, return_info=True)
+            assert x.shape == _shape
+
+            #Just for checking the augmentations, will delete later:
+            worker_info = get_worker_info()
+            is_main_worker = (worker_info is None) or (worker_info.id == 0)
+
+            if is_main_worker:
+                save_dir = "./_debug_augmented_examples"
+                os.makedirs(save_dir, exist_ok=True)
+
+                if not hasattr(self, "_debug_save_count"):
+                    self._debug_save_count = 0
+
+                if self._debug_save_count < 25:
+                    aug_tag = "none" if len(aug_info) == 0 else "+".join(aug_info)
+                    fname = f"sample_{self._debug_save_count:03d}_aug_{aug_tag}.h5"
+                    h5_path = os.path.join(save_dir, fname)
+
+                    with h5py.File(h5_path, "w") as f:
+                        f.create_dataset(
+                            "x",
+                            data=x.detach().cpu().numpy(),
+                            compression="gzip",
+                        )
+
+                    self._debug_save_count += 1
+
+
+        
 
         if isinstance(y, str):
             y = self.label_to_index[y]
@@ -113,6 +144,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
             y = torch.tensor(y, dtype=torch.long)
 
         return x, y
+
 
 
     def _resize(self, x):

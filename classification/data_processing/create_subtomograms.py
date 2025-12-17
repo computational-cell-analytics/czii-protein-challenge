@@ -95,7 +95,7 @@ def extract_subtomograms(raw_data, peaks, size, halo=4, targets=None):
         bbox_size += 1  # Ensure odd size for symmetric centering
 
     half_size = bbox_size // 2
-    print(f"Using bounding box size (with halo): {bbox_size}")
+    #print(f"Using bounding box size (with halo): {bbox_size}")
 
     subtomograms = []
     valid_coords = []
