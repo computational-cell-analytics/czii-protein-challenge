@@ -144,7 +144,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v28"
+    model_name = "protein_classification_czii_v30"
     train(args.testset, model_name)
     #mixed_train(args.testset, model_name)
 

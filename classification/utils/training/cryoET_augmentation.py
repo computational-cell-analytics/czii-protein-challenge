@@ -6,16 +6,15 @@ import math
 #proteins have no orientation, so should use random rotation
 def random_rot90(volume):
     #volume: (1, D, H, W)
-    k = random.randint(0, 3)
-    axis = random.choice([(2,3), (1,3), (1,2)])
-    return torch.rot90(volume, k, axis)
+    k = random.randint(1, 3)  # exclude 0, always rotate along x-y axis
+    return torch.rot90(volume, k, dims=(2, 3))
 
 #random flips only along x any y axis because the missing wedge could be asymmetric (#TODO could check how it is in our case)
 def random_flip(volume):
     if random.random() < 0.5:
-        volume = torch.flip(volume, dims=[2])  # Y right?
+        volume = torch.flip(volume, dims=[2])  # Y 
     if random.random() < 0.5:
-        volume = torch.flip(volume, dims=[3])  # X right?
+        volume = torch.flip(volume, dims=[3])  # X 
     return volume
 
 #TODO maybe unnecessary?
@@ -62,9 +61,9 @@ class CryoETAugment:
             volume = random_flip(volume)
             info.append("flip")
 
-        if random.random() < 0.7:
+        '''if random.random() < 0.7:
             volume = add_gaussian_noise(volume)
-            info.append("noise")
+            info.append("noise")'''
 
         if random.random() < 0.3:
             volume = gaussian_blur_3d(volume)

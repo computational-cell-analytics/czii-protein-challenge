@@ -111,7 +111,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
             assert x.shape == _shape
 
             #Just for checking the augmentations, will delete later:
-            worker_info = get_worker_info()
+            '''worker_info = get_worker_info()
             is_main_worker = (worker_info is None) or (worker_info.id == 0)
 
             if is_main_worker:
@@ -133,7 +133,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
                             compression="gzip",
                         )
 
-                    self._debug_save_count += 1
+                    self._debug_save_count += 1'''
 
 
         

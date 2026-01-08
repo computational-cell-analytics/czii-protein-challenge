@@ -125,7 +125,7 @@ def create_data_loader(
         dataset_class, n_classes=n_classes
     )
 
-    # --- Encode string labels to integers ---
+    #Encode string labels to integers
     all_labels = np.concatenate([train_set.targets_array, val_set.targets_array])
     encoder = LabelEncoder()
     encoder.fit(all_labels)
