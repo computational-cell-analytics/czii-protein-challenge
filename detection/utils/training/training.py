@@ -45,7 +45,8 @@ def get_in_channels(image_path):
         in_channels = image.shape[-1]
         # print(f"About to process images of dimensions = {image.shape}")
 
-    return in_channels'''
+    return in_channels
+'''
 
 
 def get_3d_model(
@@ -53,7 +54,7 @@ def get_3d_model(
     out_channels: int,
     scale_factors: Tuple[Tuple[int, int, int]] = [[1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]],
     initial_features: int = 32,
-    final_activation: Optional[str] = "Sigmoid",
+    final_activation: Optional[str] = None,
 ) -> torch.nn.Module:
     """Get the 3D U-Net model.
 
@@ -104,6 +105,7 @@ def supervised_training(
     dataset_class=HeatmapDataset,
     sampler=None,
     loss_fn=CombinedLoss(heatmap_weight=1.0, flow_weight=0.1),
+    final_activation: Optional[str] = None,
     **loader_kwargs,
 ):
     """
@@ -131,6 +133,7 @@ def supervised_training(
             heatmap for the CZII Cryo Challenge data, is used.
         sampler: The sampler for rejecting invalid batches. Not used by default.
         loss_fn: The loss function. By default the combined loss for the flow prediction is used.
+        final_activation: The activation applied to the last layer of the U-Net. By default no activation is used.
         loader_kwargs: Additional keyword arguments for the dataloader.
     """
     if augmentations:
@@ -163,7 +166,7 @@ def supervised_training(
         return
 
     in_channels = 1  # get_in_channels(train_images[0])
-    model = get_3d_model(in_channels=in_channels, out_channels=out_channels)
+    model = get_3d_model(in_channels=in_channels, out_channels=out_channels, final_activation=final_activation)
     metric = nn.MSELoss(reduction="mean")
 
     trainer = torch_em.default_segmentation_trainer(
