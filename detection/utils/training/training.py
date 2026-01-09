@@ -103,6 +103,7 @@ def supervised_training(
     n_samples_val: Optional[int] = None,
     dataset_class=HeatmapDataset,
     sampler=None,
+    loss_fn=CombinedLoss(heatmap_weight=1.0, flow_weight=0.1),
     **loader_kwargs,
 ):
     """
@@ -128,6 +129,8 @@ def supervised_training(
         n_samples_val: The number of samples for the validation dataset.
         dataset_class: The dataset class to use. By default `HeatmapDataset`, which creates a detection
             heatmap for the CZII Cryo Challenge data, is used.
+        sampler: The sampler for rejecting invalid batches. Not used by default.
+        loss_fn: The loss function. By default the combined loss for the flow prediction is used.
         loader_kwargs: Additional keyword arguments for the dataloader.
     """
     if augmentations:
@@ -146,7 +149,7 @@ def supervised_training(
                                                      test_paths, test_label_paths,
                                                      raw_transform=raw_transform, transform=transform,
                                                      patch_shape=patch_shape, num_workers=num_workers,
-                                                     batch_size=batch_size, raw_key= raw_key,
+                                                     batch_size=batch_size, raw_key=raw_key,
                                                      eps=eps, sigma=sigma,
                                                      lower_bound=lower_bound, upper_bound=upper_bound,
                                                      dataset_class=dataset_class,
@@ -161,10 +164,7 @@ def supervised_training(
 
     in_channels = 1  # get_in_channels(train_images[0])
     model = get_3d_model(in_channels=in_channels, out_channels=out_channels)
-
-    loss = nn.MSELoss(reduction="mean")
-    metric = loss
-    loss_fn = CombinedLoss(heatmap_weight=1.0, flow_weight=0.1)
+    metric = nn.MSELoss(reduction="mean")
 
     trainer = torch_em.default_segmentation_trainer(
         name=name,
