@@ -53,7 +53,7 @@ def get_3d_model(
     out_channels: int,
     scale_factors: Tuple[Tuple[int, int, int]] = [[1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]],
     initial_features: int = 32,
-    final_activation: Optional[str] = None,
+    final_activation: Optional[str] = "Sigmoid",
 ) -> torch.nn.Module:
     """Get the 3D U-Net model.
 
@@ -102,6 +102,7 @@ def supervised_training(
     n_samples_train: Optional[int] = None,
     n_samples_val: Optional[int] = None,
     dataset_class=HeatmapDataset,
+    sampler=None,
     **loader_kwargs,
 ):
     """
@@ -150,7 +151,8 @@ def supervised_training(
                                                      lower_bound=lower_bound, upper_bound=upper_bound,
                                                      dataset_class=dataset_class,
                                                      n_samples_train=n_samples_train,
-                                                     n_samples_val=n_samples_val)
+                                                     n_samples_val=n_samples_val,
+                                                     sampler=sampler)
     if check:
         from torch_em.util.debug import check_loader
         check_loader(train_loader, n_samples=4)
