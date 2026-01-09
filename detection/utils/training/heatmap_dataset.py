@@ -8,8 +8,14 @@ import torch
 from torch_em.util import ensure_spatial_array, ensure_tensor_with_channels, ensure_patch_shape
 from ..image import load_data
 from detection.data_processing.create_heatmap import get_label, parse_json_files
-from external.spotiflow.spotiflow.utils.peaks import points_to_flow3d
 import napari
+
+# TODO figure out how to correctly handle spotiflow dependency
+try:
+    from external.spotiflow.spotiflow.utils.peaks import points_to_flow3d
+except ImportError:
+    points_to_flow3d = None
+
 
 def compute_stereographic_flow(
     coords: np.ndarray,
@@ -41,6 +47,7 @@ def compute_stereographic_flow(
         Array with shape (4, Z, Y, X) and dtype float32 where the channel order is
         [w', z', y', x'] (same as spotiflow).
     """
+    assert points_to_flow3d is not None, "Requires spotiflow dependency"
     #print(f"using sigma of {sigma} for the stereographic flow")
     # coords may be empty
     if coords is None:
