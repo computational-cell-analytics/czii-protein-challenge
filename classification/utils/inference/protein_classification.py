@@ -9,6 +9,7 @@ import torch_em
 from torch_em.model.resnet3d import resnet3d_18
 import torch.nn as nn
 from torch_em.transform.raw import normalize
+from classification.utils.training import CryoETNormalize
 
 def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
     """
@@ -109,6 +110,10 @@ def protein_classification(
 
     #normalise
     #subtomograms = np.stack([normalize(st) for st in subtomograms])
+    normalizer = CryoETNormalize()
+    subtomograms = torch.stack(
+        [normalizer(st) for st in subtomograms]
+    ).numpy()
 
 
     t0 = time.time()

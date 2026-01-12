@@ -2,6 +2,7 @@ from typing import List, Tuple, Callable
 import numpy as np
 import torch
 from skimage.transform import resize
+import torch.nn.functional as F
 
 from itertools import chain
 from classification.training import get_coords_and_targets, get_single_subtomogram, get_volume
@@ -148,8 +149,17 @@ class ClassificationDataset(torch.utils.data.Dataset):
 
 
     def _resize(self, x):
-        out = [resize(ch, self.image_shape, preserve_range=True)[None] for ch in x]
-        return np.concatenate(out, axis=0)
+        # assume x: (C, D, H, W) torch.Tensor
+        c, d, h, w = x.shape
+        target_d, target_h, target_w = self.image_shape
+
+        x = x.unsqueeze(0)  # add batch dim
+        x_resized = F.interpolate(
+            x, size=(target_d, target_h, target_w),
+            mode="trilinear", align_corners=False
+        )
+        return x_resized.squeeze(0)
+
 
     @property
     def ndim(self):

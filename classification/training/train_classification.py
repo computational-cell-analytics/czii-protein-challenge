@@ -10,6 +10,8 @@ from torch_em.classification.classification_trainer import ClassificationTrainer
 
 from classification.training import get_paths, get_coords_and_targets, get_data
 from classification.utils import classification_training,ClassificationMetric,ClassificationDataset
+from classification.utils.training import FocalLossWithLabelSmoothing
+
 '''
 #EXPERIMENTAL DATA
 EX_TRAIN_ROOT = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
@@ -26,52 +28,6 @@ TARGET_ROOT ="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth"
 
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
-class FocalLossWithLabelSmoothing(torch.nn.Module):
-    """
-    Combines Focal Loss with Label Smoothing for multi-class classification.
-    Args:
-        num_classes: number of classes
-        gamma: focal loss focusing parameter (default 2.0)
-        alpha: class weighting factor (float or tensor)
-        label_smoothing: smoothing value epsilon (0 = no smoothing)
-    """
-
-    def __init__(self, num_classes, gamma=2.0, alpha=None, label_smoothing=0.1):
-        super().__init__()
-        self.num_classes = num_classes
-        self.gamma = gamma
-        self.label_smoothing = label_smoothing
-
-        if alpha is None:
-            self.alpha = torch.ones(num_classes) / num_classes
-        else:
-            self.alpha = torch.tensor(alpha)
-
-    def forward(self, logits, target):
-        """
-        logits: (N, C)
-        target: (N,) integer class labels
-        """
-        log_probs = torch.nn.functional.log_softmax(logits, dim=-1) 
-
-        #Label smoothing
-        with torch.no_grad():
-            true_dist = torch.zeros_like(log_probs)
-            true_dist.fill_(self.label_smoothing / (self.num_classes - 1))
-            true_dist.scatter_(1, target.unsqueeze(1), 1 - self.label_smoothing)
-
-        #Focal loss
-        probs = log_probs.exp()               # p = softmax(x)
-        focal_weight = (1 - probs) ** self.gamma
-
-        # class-weighting factor alpha
-        alpha_factor = self.alpha.to(logits.device)[target]
-        alpha_factor = alpha_factor.unsqueeze(1)  # shape (N,1)
-
-        # combine all terms
-        loss = -true_dist * alpha_factor * focal_weight * log_probs
-
-        return loss.sum(dim=1).mean()
 
 def get_augmentation():
     '''from torch_em.transform.augmentation import get_augmentations
@@ -81,8 +37,14 @@ def get_augmentation():
     return CryoETAugment()
 
 def get_normalization():
-    from torch_em.transform.raw import normalize
-    return normalize
+    '''from torch_em.transform.raw import normalize
+    return normalize'''
+
+    from classification.utils.training import CryoETNormalize
+    return CryoETNormalize(
+        eps=1e-6,
+        clip_percentile=0.01,
+    )
 
 def train(testset=True, model_name= "protein_classification"):
     in_channels=1
@@ -127,8 +89,8 @@ def train(testset=True, model_name= "protein_classification"):
         in_channels=in_channels,
         loss= focal_loss, #torch.nn.CrossEntropyLoss(),#focal_loss,
         metric=ClassificationMetric(),
-        augmentations=get_augmentation(), #get_augmentation(),
-        normalization=None, #get_normalization(),
+        augmentations=get_augmentation(),
+        normalization=get_normalization(),
         save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
         dataset_class=ClassificationDataset,
     )
@@ -144,7 +106,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v30"
+    model_name = "protein_classification_czii_v32"
     train(args.testset, model_name)
     #mixed_train(args.testset, model_name)
 
