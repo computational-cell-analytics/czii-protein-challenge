@@ -49,7 +49,7 @@ def get_normalization():
 def train(testset=True, model_name= "protein_classification"):
     in_channels=1
     n_classes = 7
-    datasets = ["ExperimentRuns_faket_snr_1_2"]
+    datasets = ["ExperimentRuns_faket_snr_0_12_0_2", "ExperimentRuns"]
     #model_name = "protein_classification_czii_v11"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
@@ -90,7 +90,7 @@ def train(testset=True, model_name= "protein_classification"):
         loss= focal_loss, #torch.nn.CrossEntropyLoss(),#focal_loss,
         metric=ClassificationMetric(),
         augmentations=get_augmentation(),
-        normalization=get_normalization(),
+        normalization=get_normalization(), #get_normalization(), None
         save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
         dataset_class=ClassificationDataset,
     )
@@ -106,7 +106,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v32"
+    model_name = "protein_classification_czii_v37"
     train(args.testset, model_name)
     #mixed_train(args.testset, model_name)
 

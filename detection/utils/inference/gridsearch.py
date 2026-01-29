@@ -110,7 +110,12 @@ def gridsearch(json_val_path, model_path):
         pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model_path=model_path, verbose=True)[0]
 
         
-        json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
+        #json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
+        json_files = [
+            os.path.join(label_path, f)
+            for f in os.listdir(label_path)
+            if f.endswith('.json') and f not in ('no_class.json', 'albumin.json')
+        ]
         label_coords, _ = parse_json_files(json_files)
 
 

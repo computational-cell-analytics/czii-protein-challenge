@@ -77,10 +77,10 @@ def run_protein_detection(input_path, output_path, model_path, json_val_path, th
     output_folder = output_path #os.path.join(output_path, model_name)
     os.makedirs(output_folder, exist_ok=True)
 
-    #save prediction
+    '''#save prediction
     output_np_file = os.path.join(output_folder, f"{input_name}_protein_detections.npy")
     np.save(output_np_file, pred)
-    print(f"Heatmap saved to {output_np_file}")
+    print(f"Heatmap saved to {output_np_file}")'''
 
     # Save results to a JSON file
     output_json_file = os.path.join(output_folder, f"{input_name}_protein_detections.json")
@@ -144,7 +144,7 @@ def main():
         process_folder(args)
 
 
-    print("Finished segmenting!")
+    print("Finished detecting!")
 
 if __name__ == "__main__":
     main()

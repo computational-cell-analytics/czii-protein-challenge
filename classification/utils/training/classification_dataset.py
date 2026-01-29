@@ -149,6 +149,9 @@ class ClassificationDataset(torch.utils.data.Dataset):
 
 
     def _resize(self, x):
+        '''out = [resize(ch, self.image_shape, preserve_range=True)[None] for ch in x]
+        return np.concatenate(out, axis=0)'''
+
         # assume x: (C, D, H, W) torch.Tensor
         c, d, h, w = x.shape
         target_d, target_h, target_w = self.image_shape
