@@ -39,7 +39,11 @@ def update_csv(csv_file, new_rows):
 
 
 def evaluate_per_protein_type(pred_coords, label_path, model_name, input_name):
-    json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
+    json_files = [
+        os.path.join(label_path, f)
+        for f in os.listdir(label_path)
+        if f.endswith('.json') and f not in ('no_class.json', 'albumin.json')
+    ]
     label_coords, protein_types = parse_json_files(json_files)
     
     # Organize label_coords by protein type

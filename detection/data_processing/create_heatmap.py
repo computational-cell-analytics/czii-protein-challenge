@@ -113,7 +113,12 @@ def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_boun
         np.ndarray: Generated 3D heatmap.
     """
     picks_folder = os.path.join(json_folder, "Picks")
-    json_files = [os.path.join(picks_folder, f) for f in os.listdir(picks_folder) if f.endswith('.json')]
+    #json_files = [os.path.join(picks_folder, f) for f in os.listdir(picks_folder) if f.endswith('.json')]
+    json_files = [
+        os.path.join(picks_folder, f)
+        for f in os.listdir(picks_folder)
+        if f.endswith('.json') and f not in ('no_class.json', 'albumin.json')
+    ]
     coordinates, protein_types = parse_json_files(json_files)
     width_dict = create_width_dict()
     gaussian_dict = precompute_gaussians(width_dict, eps, lower_bound, upper_bound)

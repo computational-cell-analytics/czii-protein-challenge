@@ -2,3 +2,5 @@ from .classification_dataset import ClassificationDataset
 from .data_loader import create_data_loader
 from .training import classification_training, ClassificationMetric
 from .cryoET_augmentation import CryoETAugment
+from .normalization import CryoETNormalize
+from .loss import FocalLossWithLabelSmoothing
