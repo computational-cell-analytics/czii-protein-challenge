@@ -2,6 +2,7 @@ import numpy as np
 from skimage.feature import blob_log, peak_local_max
 from .gridsearch import gridsearch
 
+
 def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO do this properly
     """
     Detect protein coordinates from a heatmap and adjust them using stereographic flow predictions.
@@ -39,9 +40,9 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO
         threshold_abs=threshold
     )
 
-    # --- Apply stereographic flow correction ---
+    # Apply stereographic flow correction
     # Extract flow channels
-    flow_w = heatmap[1]  # stereographic scaling (if needed later)
+    flow_w = heatmap[1]  # stereographic scaling (TODO needed later?)
     flow_z = heatmap[2]
     flow_y = heatmap[3]
     flow_x = heatmap[4]
@@ -54,7 +55,7 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO
         dx = flow_x[z, y, x]
 
         # Optionally apply stereographic scaling (if relevant)
-        # In Spotiflow, coordinates are typically adjusted directly by the flow values
+        # In Spotiflow, coordinates are typically adjusted directly by the flow values TODO
         adj_z = z + dz
         adj_y = y + dy
         adj_x = x + dx

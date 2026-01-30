@@ -2,6 +2,7 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 
+
 def _calc_sMAPE(n,m):
     if n == 0 and m == 0:
         return 0
@@ -12,9 +13,11 @@ def _calc_sMAPE(n,m):
         return abs(n-m)/(abs(n) + abs(m))
     else: 
         return 1
-    
+
+
 def _calc_mae(n, m):
     return np.abs(n-m)
+
 
 def _compute_pairwise_distances(gt, pred):
     pairwise_distances = cdist(gt, pred, metric="euclidean")
@@ -22,6 +25,7 @@ def _compute_pairwise_distances(gt, pred):
     if np.any(pairwise_distances):
         pairwise_distances = np.stack(pairwise_distances)
     return pairwise_distances
+
 
 def _dev_percentage(n,m):
     if n > 0 and m > 0:

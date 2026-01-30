@@ -1,8 +1,7 @@
 import os
 import time
 import warnings
-# from glob import glob
-from typing import Dict  # , Optional, Tuple
+from typing import Dict
 
 import numpy as np
 import torch
@@ -57,7 +56,7 @@ def get_prediction_torch_em(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
 
-        if os.path.isdir(model_path):  # Load the model from a torch_em checkpoint.
+        if os.path.isdir(model_path):  # Load the model from torch_em checkpoint
             import sys
             import detection.utils as det_utils
 

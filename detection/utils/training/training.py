@@ -9,6 +9,7 @@ import torch.nn as nn
 from .data_loader import create_data_loader
 from .heatmap_dataset import HeatmapDataset
 
+
 class CombinedLoss(nn.Module):
     def __init__(self, heatmap_weight=1.0, flow_weight=0.1):
         super().__init__()
@@ -28,7 +29,7 @@ class CombinedLoss(nn.Module):
         total_loss = self.heatmap_weight * l_h + self.flow_weight * l_f
         return total_loss
 
-
+#TODO
 '''#Julias code ... don't know yet if I need to chage it ...
 def get_in_channels(image_path):
     # Load the first image to determine the number of channels
@@ -91,7 +92,7 @@ def supervised_training(
     lr: float = 1e-4,
     n_iterations: int = int(1e5),
     check: bool = False,
-    out_channels: int = 5,  # <--- 5 channels (1 heatmap + 4 flow) #had out_channels = 2 before adding the stereographic flow
+    out_channels: int = 5,  # 5 channels (1 heatmap + 4 flow) #had out_channels = 2 before adding the stereographic flow
     augmentations: Optional[bool] = False,
     eps: float = 1e-5,
     sigma: int = None,
@@ -137,7 +138,7 @@ def supervised_training(
         loader_kwargs: Additional keyword arguments for the dataloader.
     """
     if augmentations:
-        # This is not implemented!
+        # This is not implemented! TODO ?
         raise NotImplementedError
         # raw_transform = DataAugmentations(p=0.25)
         # transform = get_augmentations(ndim=2)
@@ -145,7 +146,7 @@ def supervised_training(
         raw_transform = None
         transform = None
 
-    num_workers = 6  # Julias example
+    num_workers = 6  # Julias example TODO change?
 
     train_loader, val_loader, _ = create_data_loader(train_paths, train_label_paths,
                                                      val_paths, val_label_paths,

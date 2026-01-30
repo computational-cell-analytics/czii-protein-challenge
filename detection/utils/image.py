@@ -49,7 +49,6 @@ def load_image(image_path, memmap=True):
             return mrc.data
 
 
-
 class MultiDatasetWrapper:
 
     def __init__(self, *file_datasets):

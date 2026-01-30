@@ -12,8 +12,8 @@ from detection.data_processing.create_heatmap import parse_json_files
 import numpy as np
 
 #TODO Do I want to make this more flexible??
-TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
-LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
+TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
+LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/"
 DEFAULT_JSON = "/mnt/lustre-emmy-hdd/usr/u12095/cryo-et/czii_challenge/training/protein_detection_czii_v4/split-ExperimentRuns.json"
 
 
@@ -38,6 +38,7 @@ def get_non_zarr(input_path):
         input_volume = mrc.data  
 
     return input_volume
+
 
 def get_volume(input_path: str) -> np.ndarray:
     # Recursive search for .zarr folders
@@ -75,7 +76,8 @@ def get_full_image_path(json_val_path, val_path):
     image_path = os.path.join(TRAIN_ROOT, experiment_name,val_path)
 
     return image_path
-    
+
+
 def get_full_label_path(json_val_path, val_path):
     file_name = os.path.basename(json_val_path)
     # Remove the prefix "split-" and the suffix ".json"
@@ -84,6 +86,7 @@ def get_full_label_path(json_val_path, val_path):
     label_path = os.path.join(LABEL_ROOT, experiment_name, val_path,"Picks")
 
     return label_path
+
 
 def gridsearch(json_val_path, model_path):
     print("starting grid search")
@@ -109,16 +112,12 @@ def gridsearch(json_val_path, model_path):
         input_volume = get_volume(image_path)
         pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model_path=model_path, verbose=True)[0]
 
-        
-        #json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
         json_files = [
             os.path.join(label_path, f)
             for f in os.listdir(label_path)
             if f.endswith('.json') and f not in ('no_class.json', 'albumin.json')
         ]
         label_coords, _ = parse_json_files(json_files)
-
-
 
         for thresh in tqdm(threshes):
 

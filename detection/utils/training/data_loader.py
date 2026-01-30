@@ -2,6 +2,7 @@ from torch.utils.data import DataLoader
 from .heatmap_dataset import HeatmapDataset
 from torch_em.data.concat_dataset import ConcatDataset
 
+
 def samples_to_datasets(n_samples, raw_paths, raw_key, split="uniform"):
     """@private
     """
@@ -15,6 +16,7 @@ def samples_to_datasets(n_samples, raw_paths, raw_key, split="uniform"):
     else:
         # distribution of samples to dataset based on the dataset lens
         raise NotImplementedError
+
 
 def _load_dataset(
     raw_paths,
@@ -56,10 +58,11 @@ def _load_dataset(
         ds = ConcatDataset(*ds)
     return ds
 
+
 def create_data_loader(
     train_images, train_labels,
     val_images, val_labels,
-    test_images,test_labels,
+    test_images, test_labels,
     raw_transform, transform,
     patch_shape, num_workers, batch_size,
     raw_key=None,

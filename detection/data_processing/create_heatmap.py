@@ -1,10 +1,10 @@
 import numpy as np
-from scipy.ndimage import gaussian_filter
 from skimage.filters import gaussian
 import json
 import argparse
 import os
 import zarr
+
 
 def width_to_sigma(width, eps, lower_bound, upper_bound):
     # shrink needs to be between 0 and 1
@@ -17,6 +17,7 @@ def width_to_sigma(width, eps, lower_bound, upper_bound):
             sigma = upper_bound
 
     return int(sigma)
+
 
 def create_gaussian_stamp(width, eps, lower_bound, upper_bound):
     """
@@ -35,18 +36,17 @@ def create_gaussian_stamp(width, eps, lower_bound, upper_bound):
     # Set the center point to 1 (Gaussian peak)
     stamp[center, center, center] = 1
 
-    # Apply 3D Gaussian filter to create the Gaussian distribution in 3D space
-    #stamp = gaussian_filter(stamp, sigma=sigma)
-    #Julia:
+    #STACC
     stamp = gaussian(stamp, sigma=sigma, truncate=10.0, mode='constant')
     
     # Threshold the values based on epsilon and apply the scaling factor
     stamp[stamp < eps] = 0
-    factor_3d = 2.5 #I had 1.6 as values for the centres of the gaussians before, but it should be 4, so 4/1.6=2.5
+    factor_3d = 2.5 #centres of the gaussians should be 4, so 4/1.6=2.5
     stamp = stamp * 8 * factor_3d * np.pi * sigma**3
 
     return stamp
     
+
 def parse_json_files(json_files):
     """
     Parse multiple JSON files to extract coordinates and protein names.
@@ -76,6 +76,7 @@ def parse_json_files(json_files):
 
     return coordinates, protein_types
 
+
 def create_width_dict():
     """
     Create a dictionary mapping protein names to widths.
@@ -92,8 +93,10 @@ def create_width_dict():
         "virus-like-particle": 79.07
     }
 
+
 def precompute_gaussians(width_dict, eps, lower_bound, upper_bound):
     return {protein: create_gaussian_stamp(int(width * 0.3), eps, lower_bound, upper_bound) for protein, width in width_dict.items()}
+
 
 def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_bound=None, upper_bound=None, bb=None):
     """
@@ -113,7 +116,6 @@ def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_boun
         np.ndarray: Generated 3D heatmap.
     """
     picks_folder = os.path.join(json_folder, "Picks")
-    #json_files = [os.path.join(picks_folder, f) for f in os.listdir(picks_folder) if f.endswith('.json')]
     json_files = [
         os.path.join(picks_folder, f)
         for f in os.listdir(picks_folder)
@@ -158,6 +160,7 @@ def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_boun
     
     return heatmap
 
+
 def get_label(json_folder, image_shape, eps=0.00001, sigma=None, lower_bound=None, upper_bound=None, bb=None):
 
     have_single_file = isinstance(json_folder, str)
@@ -198,8 +201,8 @@ def get_tomo_shape(zarr_folder):
                 # Recursively traverse subgroup
                 traverse_zarr(item, current_key)
 
-    
     return traverse_zarr(zarr_store)
+
 
 def main():
 
@@ -216,7 +219,7 @@ def main():
         output_folder = args.output_folder
         os.makedirs(output_folder, exist_ok=True)
 
-        output_file =  os.path.join(output_folder, "heatmap.npy")
+        output_file = os.path.join(output_folder, "heatmap.npy")
 
         heatmap = create_heatmap(json_folder, tomogram_shape)
 
@@ -232,6 +235,7 @@ def main():
 
     else:
         print("No 0 zarr was found")
+
 
 if __name__ == "__main__":
     main()

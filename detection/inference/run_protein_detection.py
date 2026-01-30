@@ -10,6 +10,7 @@ from detection.utils.prediction.prediction import get_prediction_torch_em
 from detection.utils.inference.protein_detection import protein_detection
 from detection.utils.training.tiling_helper import parse_tiling
 
+
 def get_non_zarr(input_path):
     #TODO expand for other file types
 
@@ -31,6 +32,7 @@ def get_non_zarr(input_path):
         input_volume = mrc.data  
 
     return input_volume
+
 
 def get_volume(input_path: str) -> np.ndarray:
     # Recursive search for .zarr folders
@@ -59,6 +61,7 @@ def get_volume(input_path: str) -> np.ndarray:
     
     return volume
 
+
 def run_protein_detection(input_path, output_path, model_path, json_val_path, threshold=None):
 
     tiling = parse_tiling(tile_shape=None, halo=None) #TODO implement tiling and halo choices
@@ -72,9 +75,8 @@ def run_protein_detection(input_path, output_path, model_path, json_val_path, th
 
     print(f"these are the results: {detections}")
 
-    model_name = os.path.basename(os.path.normpath(model_path))
     input_name = os.path.basename(input_path)
-    output_folder = output_path #os.path.join(output_path, model_name)
+    output_folder = output_path
     os.makedirs(output_folder, exist_ok=True)
 
     '''#save prediction
@@ -106,7 +108,7 @@ def process_folder(args):
 
         # Skip if already processed
         if os.path.exists(output_json):
-            print(f"Skipping {input_name} — results already exist.")
+            print(f"Skipping {input_name} - results already exist.")
             continue
 
         threshold = run_protein_detection(
@@ -143,8 +145,8 @@ def main():
     else:
         process_folder(args)
 
-
     print("Finished detecting!")
+
 
 if __name__ == "__main__":
     main()

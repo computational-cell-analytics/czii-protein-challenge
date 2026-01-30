@@ -3,9 +3,6 @@ from glob import glob
 import json
 from sklearn.model_selection import train_test_split
 
-TRAIN_ROOT = ""
-OUTPUT_ROOT = ""
-
 
 def _require_train_val_test_split(datasets, train_root, output_root, extension):
     train_ratio, val_ratio, test_ratio = 0.8, 0.1, 0.1
@@ -39,7 +36,7 @@ def _require_train_val_test_split(datasets, train_root, output_root, extension):
 
 
 def _require_train_val_split(datasets, train_root, output_root, extension):
-    train_ratio, val_ratio = 0.8, 0.2  # noqa
+    train_ratio, val_ratio = 0.8, 0.2
 
     def _train_val_split(names):
         train, val = train_test_split(names, test_size=1 - train_ratio, shuffle=True)

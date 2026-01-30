@@ -1,13 +1,13 @@
 import os
-# from glob import glob
 import argparse
 
-from detection.utils import get_paths  # noqa
-from detection.utils import supervised_training  # noqa
+from detection.utils import get_paths  
+from detection.utils import supervised_training 
 
-TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/raw" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
-LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/labels" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
-OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/training" #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
+TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
+LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/"
+OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
+
 
 def find_zarr_or_mrc(base_path):
     zarr_folders = []
@@ -39,7 +39,7 @@ def find_zarr_or_mrc(base_path):
     # Return the first .mrc found
     return mrc_files[0]
 
-    
+
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):
 
     datasets = ["ExperimentRuns_faket_snr_0_12_0_2", "ExperimentRuns"]
@@ -83,14 +83,13 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     print(f"val_paths{val_paths}")
     print(f"test_paths {test_paths}")
     
-    # TODO do we want n_samples_train and n_samples_val in the supervised training?
     supervised_training(
         name=model_name,
         train_paths=train_paths,
         train_label_paths=train_label_paths,
         val_paths=val_paths,
         val_label_paths=val_label_paths,
-        raw_key = "0",
+        raw_key="0",
         patch_shape=patch_shape, batch_size=batch_size,
         check=check,
         lr=1e-4,
@@ -103,7 +102,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         upper_bound=None,
         test_paths=test_paths,
         test_label_paths=test_label_paths,
-        save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models", #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/models", #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
+        save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
     )
 
 
