@@ -1,9 +1,6 @@
-import warnings
-from functools import partial
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
-from numpy.typing import ArrayLike
 import sklearn.metrics as metrics
 import torch
 import torch_em
@@ -68,7 +65,7 @@ def classification_training(
     train_paths: List[str],
     val_paths: List[str],
     test_paths: List[str],
-    max_extent:int,
+    max_extent: int,
     target_root: str,
     patch_shape: Tuple[int, int, int],
     batch_size: int = 1,
@@ -81,8 +78,8 @@ def classification_training(
     in_channels: int = 1,
     loss: Optional[torch.nn.Module] = None,
     metric: Optional[ClassificationMetric] = None,
-    augmentations: Optional[Callable] = None,  # TODO: Replace with real augmentation pipeline
-    normalization: Optional[Callable] = None,  # TODO: Replace with real normalization
+    augmentations: Optional[Callable] = None,
+    normalization: Optional[Callable] = None,
     save_root: Optional[str] = None,
     n_samples_train: Optional[int] = None,
     n_samples_val: Optional[int] = None,
@@ -144,7 +141,7 @@ def classification_training(
         check_loader(val_loader, n_samples=4)
         return
 
-    model = get_3d_model(EfficientNet=False,in_channels=in_channels, out_channels=out_channels)
+    model = get_3d_model(EfficientNet=False, in_channels=in_channels, out_channels=out_channels)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -174,4 +171,3 @@ def classification_training(
     trainer.fit(n_iterations)
 
     return idx_to_label
-

@@ -3,19 +3,22 @@ import torch.nn.functional as F
 import random
 import math
 
+
 #proteins have no orientation, so should use random rotation
 def random_rot90(volume):
     #volume: (1, D, H, W)
     k = random.randint(1, 3)  # exclude 0, always rotate along x-y axis
     return torch.rot90(volume, k, dims=(2, 3))
 
-#random flips only along x any y axis because the missing wedge could be asymmetric (#TODO could check how it is in our case)
+
+#random flips only along x any y axis because the missing wedge could be asymmetric 
 def random_flip(volume):
     if random.random() < 0.5:
         volume = torch.flip(volume, dims=[2])  # Y 
     if random.random() < 0.5:
         volume = torch.flip(volume, dims=[3])  # X 
     return volume
+
 
 #add noise relative to Mean squared voxel intensity with a range
 def add_gaussian_noise(volume, snr_db_range=(20, 30)):
@@ -24,7 +27,6 @@ def add_gaussian_noise(volume, snr_db_range=(20, 30)):
     noise_power = signal_power / (10 ** (snr_db / 10))
     noise = torch.randn_like(volume) * torch.sqrt(noise_power)
     return volume + noise
-
 
 
 #using small sigma to not change the resolution too much

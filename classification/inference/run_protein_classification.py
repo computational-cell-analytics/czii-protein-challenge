@@ -3,12 +3,11 @@ import os
 import h5py
 import zarr
 import json
-from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 import random
 
@@ -41,6 +40,7 @@ def get_non_zarr(input_path):
 
     return input_volume
 
+
 def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
     if zarr_:
         # Recursive search for .zarr folders
@@ -70,7 +70,6 @@ def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
         volume = get_non_zarr(input_path)
     
     return volume
-
 
 
 def preprocess_tomo_with_labels(
@@ -112,7 +111,7 @@ def preprocess_tomo_with_labels(
 
 
 def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label):
-    # --- Save confusion matrix (raw counts) ---
+    # Save confusion matrix (raw counts)
     cm = confusion_matrix(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt="d", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues")
@@ -123,7 +122,7 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.savefig(os.path.join(output_path, f"confusion_matrix_{name}.png"))
     plt.close()
 
-    # --- Save confusion matrix (normalized: 0-1) ---
+    # Save confusion matrix (normalized: 0-1)
     cm_norm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm_norm, annot=True, fmt=".2f", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues", vmin=0, vmax=1)
@@ -134,7 +133,7 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.savefig(os.path.join(output_path, f"confusion_matrix_normalized_{name}.png"))
     plt.close()
     '''
-    # --- Save results as list (CSV) ---
+    #Save results as list (CSV) 
     results_df = pd.DataFrame({
         "sample_id": sample_ids,
         "truth": truth_labels,
@@ -142,7 +141,7 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     })
     results_df.to_csv(os.path.join(output_path, f"classification_results_{name}.csv"), index=False)
 
-    # --- Save scatter plot of embeddings (t-SNE of probs) ---
+    # Save scatter plot of embeddings (t-SNE of probs)
     tsne = TSNE(n_components=2, random_state=42)
     probs_2d = tsne.fit_transform(np.array(probs))
 
@@ -157,11 +156,10 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.savefig(os.path.join(output_path, f"tsne_scatter_{name}.png"))
     plt.close()
     '''
-    # --- Save classification report ---
+    # Save classification report
     report = classification_report(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     with open(os.path.join(output_path, f"classification_report_{name}.txt"), "w") as f:
         f.write(report)
-
 
 
 def run_global_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, idx_to_label):
@@ -179,7 +177,7 @@ def run_protein_classification_with_labels(
 ):
     os.makedirs(output_path, exist_ok=True)
 
-    # Load int→label mapping
+    # Load int to label mapping
     with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
         idx_to_label = json.load(f)
 
@@ -204,7 +202,7 @@ def run_protein_classification_with_labels(
         all_probs.extend(probs.tolist())
         all_truths.extend(truths_batch)
 
-    # --- Convert int preds to labels ---
+    # Convert int preds to labels
     all_pred_labels = [idx_to_label[str(p)] for p in all_preds]
     all_truth_labels = [idx_to_label[str(t)] if str(t) in idx_to_label else t for t in all_truths]
 
@@ -291,7 +289,7 @@ def main():
             global_preds.extend(preds)
             global_probs.extend(probs)
 
-        # --- Global evaluation ---
+        # Global evaluation
         with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
             idx_to_label = json.load(f)
         run_global_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, idx_to_label)

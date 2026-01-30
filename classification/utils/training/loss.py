@@ -1,5 +1,6 @@
 import torch
 
+
 class FocalLossWithLabelSmoothing(torch.nn.Module):
     """
     Combines Focal Loss with Label Smoothing for multi-class classification.

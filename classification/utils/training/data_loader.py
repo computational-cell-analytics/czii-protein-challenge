@@ -47,39 +47,6 @@ def _load_dataset(
 
     print(f"Initialized dataset with {len(ds)} samples from {len(paths)} tomograms")
 
-    #TODO more flexible along different datasets?
-    '''
-    if isinstance(subtomogram_list, np.ndarray):
-        ds = dataset_class(
-            subtomogram=subtomogram_list[None, ...],  # wrap in a list to keep consistent shape
-            target=targets,
-            normalization=normalization,
-            augmentation=augmentation,
-            image_shape=image_shape,
-            n_classes=n_classes,
-            n_samples=n_samples,
-        )
-    else:
-        samples_per_ds = (
-            [None] * len(subtomogram_list) if n_samples is None else samples_to_datasets(n_samples, len(subtomogram_list))
-        )
-        ds = []
-        for i, (subtomogram_list, targets) in enumerate(zip(subtomogram_list, targets)):
-
-            dset = dataset_class(
-                subtomogram=subtomogram_list,
-                target=targets,
-                normalization=normalization,
-                augmentation=augmentation,
-                image_shape=image_shape,
-                n_classes=n_classes,
-                n_samples=samples_per_ds[i],
-            )
-
-            ds.append(dset)
-        ds = ConcatDataset(*ds)
-    '''
-
     return ds
 
 
@@ -156,6 +123,6 @@ def create_data_loader(
 
     train_loader.shuffle = True 
     val_loader.shuffle = True 
-    test_loader.shuffle=True
+    test_loader.shuffle = True
 
     return train_loader, val_loader, test_loader, idx_to_label

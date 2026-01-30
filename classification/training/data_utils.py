@@ -3,11 +3,8 @@ import os
 import json
 import numpy as np
 import zarr
-from glob import glob
 from typing import List, Tuple, Sequence
 from sklearn.model_selection import train_test_split
-from numpy.typing import ArrayLike
-from elf.io import open_file
 
 from classification.data_processing import extract_subtomograms, get_max_extent
 
@@ -82,6 +79,7 @@ def get_paths(
 
     return paths
 
+
 def get_non_zarr(input_path):
     #TODO expand for other file types
 
@@ -103,6 +101,7 @@ def get_non_zarr(input_path):
         input_volume = mrc.data  
 
     return input_volume
+
 
 def get_volume(input_path: str) -> np.ndarray:
     # Recursive search for .zarr folders
@@ -142,6 +141,7 @@ def load_peaks(json_filepath: str) -> List[Tuple[int, int, int]]:
         peaks = json.load(f)
     return [tuple(map(int, peak)) for peak in peaks]
 
+
 def compute_max_extent_from_all(
     all_peaks: List[Sequence[Tuple[int, int, int]]],
     all_heatmaps: List[np.ndarray],
@@ -152,6 +152,7 @@ def compute_max_extent_from_all(
     ]
     max_extent = max(max_extents)
     return max_extent
+
 
 def get_coords_and_heatmaps(
     paths: List[str],
@@ -172,6 +173,7 @@ def get_coords_and_heatmaps(
         heatmaps.append(heatmap)
 
     return coords_all, heatmaps
+
 
 def parse_json_files(json_files):
     """
@@ -236,6 +238,7 @@ def get_coords_and_targets(paths: List[str], target_root: str) -> Tuple[List[Lis
 
     return coords_all, targets_all
 
+
 def get_data(
     paths: List[str],
     coords_all: List[List[Tuple[int, int, int]]],
@@ -275,6 +278,7 @@ def get_data(
                 all_filtered_targets.append(tgt)
 
     return subtomograms, all_filtered_targets
+
 
 def get_single_subtomogram(
     path: str,

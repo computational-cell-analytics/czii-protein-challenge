@@ -8,8 +8,8 @@ import numpy as np
 import torch_em
 from torch_em.model.resnet3d import resnet3d_18
 import torch.nn as nn
-from torch_em.transform.raw import normalize
 from classification.utils.training import CryoETNormalize
+
 
 def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
     """
@@ -75,6 +75,7 @@ def get_model(model_path, device, EfficientNet=False):
 
     return model
 
+
 def protein_classification(
     subtomograms: np.ndarray,  # [z, y, x] or (N, z, y, x)
     model_path: str = None,
@@ -109,6 +110,7 @@ def protein_classification(
         #subtomograms = pad_to_patch(subtomograms)
 
     #normalise
+    #from torch_em.transform.raw import normalize
     #subtomograms = np.stack([normalize(st) for st in subtomograms])
     normalizer = CryoETNormalize()
     subtomograms = torch.stack(
@@ -127,14 +129,11 @@ def protein_classification(
         warnings.simplefilter("ignore")
 
         if os.path.isdir(model_path):  # Load model from torch_em checkpoint dir
-            #model = torch_em.util.load_model(checkpoint=model_path, device=device)
             model = get_model(model_path=model_path, device=device, EfficientNet=EfficientNet)
         else:  # Load model directly from serialized pytorch model
-            #model = torch.load(model_path, map_location=device)
             #TODO!
             print("not implemented yet!")
 
-    #model.eval()
 
     with torch.no_grad():
         tensor = torch.from_numpy(subtomograms).float().unsqueeze(1).to(device)  # (N, 1, D, H, W)

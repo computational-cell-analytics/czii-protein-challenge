@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 import random
 import csv
@@ -20,9 +20,8 @@ from scipy.optimize import linear_sum_assignment
 
 from classification.data_processing import extract_subtomograms
 from classification.utils import protein_classification
-from classification.training import get_coords_and_targets
 
-from classification.inference.visual_checks import save_subtomo_view, save_tomo_match_overview, save_examples_csv, sample_and_save_montages_by_category
+from classification.inference.visual_checks import save_subtomo_view
 
 
 def load_detection_predictions(pred_path):
@@ -51,6 +50,7 @@ def get_non_zarr(input_path):
         input_volume = mrc.data  
 
     return input_volume
+
 
 def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
     if zarr_:
@@ -82,6 +82,7 @@ def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
     
     return volume
 
+
 def match_predictions_to_labels(preds, gts, match_distance=45):
     """
     Match predicted coordinates to ground-truth coordinates using Hungarian algorithm.
@@ -103,7 +104,7 @@ def match_predictions_to_labels(preds, gts, match_distance=45):
     # Compute pairwise distances
     pairwise_distances = cdist(gts, preds, metric="euclidean")
 
-    # Define costs (Hungarian finds *minimum* cost)
+    # Define costs (Hungarian finds 'minimum' cost)
     max_distance = pairwise_distances.max() if pairwise_distances.size > 0 else 1.0
     costs = -(pairwise_distances < match_distance).astype(float) - \
             (max_distance - pairwise_distances) / max_distance
@@ -117,6 +118,7 @@ def match_predictions_to_labels(preds, gts, match_distance=45):
     matched_pred_idx = pred_idx[match_mask].tolist()
 
     return matched_pred_idx, matched_gt_idx
+
 
 def match_preds_with_labels(preds, label_path, no_class_label="no_class"):
     """
@@ -150,7 +152,8 @@ def match_preds_with_labels(preds, label_path, no_class_label="no_class"):
     matched_idx_pred, matched_idx_gt = match_predictions_to_labels(preds, real_gt_coords)
 
     filter = False
-    match_distance=45
+    match_distance = 45
+
     if filter:
         # Compute nearest GT distance for each pred
         if len(real_gt_coords) > 0:
@@ -436,8 +439,6 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
             )
 
 
-
-
 def run_global_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, idx_to_label, num_unmatched, unmatched_info):
     run_full_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, "ALL", idx_to_label, num_unmatched, unmatched_info)
 
@@ -455,7 +456,7 @@ def run_protein_classification_with_labels(
 ):
     os.makedirs(output_path, exist_ok=True)
 
-    # Load int→label mapping
+    # Load index to label mapping #TODO should I make this flexible?
     with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
         idx_to_label = json.load(f)
 
@@ -480,7 +481,7 @@ def run_protein_classification_with_labels(
         all_probs.extend(probs.tolist())
         all_truths.extend(truths_batch)
 
-    # --- Convert int preds to labels ---
+    #Convert int preds to labels 
     all_pred_labels = [idx_to_label[str(p)] for p in all_preds]
     all_truth_labels = [idx_to_label[str(t)] if str(t) in idx_to_label else t for t in all_truths]
 
@@ -492,29 +493,27 @@ def run_protein_classification_with_labels(
     vis_dir = os.path.join(output_path, "visual_checks")
     os.makedirs(vis_dir, exist_ok=True)
 
-    # per-sample visualization and CSV records (do for the current batch)
+    # per-sample visualization and csv results (do for the current batch)
     batch_records = []
     for sid, cube, pred_int, prob_vec, true_lbl in zip(sample_ids, cubes, preds, probs, truths_batch):
 
         # Decide top probability and label (if probs is vector)
         if hasattr(prob_vec, "__len__") and len(prob_vec) > 1:
-            top_idx = int(np.argmax(prob_vec))
             top_prob = float(np.max(prob_vec))
         else:
-            top_idx = int(pred_int)
             top_prob = float(prob_vec) if not hasattr(prob_vec, "__len__") else float(prob_vec[0])
 
-        # translate pred_int to label string using idx_to_label if available outside this function
+        # translate pred_int to label string using idx_to_label
         pred_label_str = idx_to_label[str(pred_int)] if 'idx_to_label' in globals() and str(pred_int) in idx_to_label else str(pred_int)
         true_label_str = idx_to_label[str(true_lbl)] if 'idx_to_label' in globals() and str(true_lbl) in idx_to_label else str(true_lbl)
 
-        # build sample-specific viz path
+        # sample-specific viz path
         viz_path = os.path.join(vis_dir, f"{sid}_viz.png")
         save_subtomo_view(cube, viz_path, sid, pred_label_str, true_label_str, pred_prob=top_prob)
 
         batch_records.append({
             "sample_id": sid,
-            "h5_path": sid,  # already your sample id includes filename; change to file path if needed
+            "h5_path": sid,
             "pred_label": pred_label_str,
             "true_label": true_label_str,
             "prob": top_prob,
@@ -530,7 +529,6 @@ def run_protein_classification_with_labels(
         pd.concat([df_existing, df_new], ignore_index=True).to_csv(csv_path, index=False)
     else:
         pd.DataFrame(batch_records).to_csv(csv_path, index=False)
-
 
     return all_sample_ids, all_truth_labels, all_pred_labels, all_probs
 
@@ -582,7 +580,7 @@ def main():
         n_eval = max(1, int(len(tomogram_folders) * 0.1))
         eval_tomos = set(random.sample(tomogram_folders, n_eval))
 
-        global_num_unmatched=0
+        global_num_unmatched = 0
         global_unmatched_info = {}
 
         for subfolder_path in tomogram_folders:
@@ -597,7 +595,6 @@ def main():
                 max_extent=args.max_extent,
                 subtomo_output=args.subtomo_output
             )
-
 
             tomo_name = os.path.basename(subfolder_path)
 
@@ -637,7 +634,6 @@ def main():
             max_extent=args.max_extent,
             subtomo_output=args.subtomo_output
         )
-
 
         tomo_name = os.path.basename(args.input_path)
 

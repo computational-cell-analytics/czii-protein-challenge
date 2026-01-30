@@ -35,13 +35,13 @@ def load_heatmap(npy_filepath):
     return heatmap
 
 
-
 def load_peaks(json_filepath):
     """Load list of 3D peak coordinates from JSON file and scale them down by 10."""
     with open(json_filepath, 'r') as f:
         peaks = json.load(f)
     # Divide each coordinate by 10
     return [tuple(coord / 10 for coord in peak) for peak in peaks]
+
 
 def estimate_gaussian_extent(heatmap, coord, threshold=0.1): #TODO might want to lower threshold?
     """
@@ -166,6 +166,7 @@ def get_max_extent(peaks, heatmap):
         max_extent = int(np.max(filtered_extents))
     
     return max_extent
+
 
 def main():
     args = parse_arguments()
