@@ -12,26 +12,53 @@ from detection.utils.training.tiling_helper import parse_tiling
 
 
 def get_non_zarr(input_path):
-    #TODO expand for other file types
+    """
+    Load a single volumetric file from a directory.
+    Supports .mrc, .h5, .npy, .tif/.tiff.
+    """
 
-    import mrcfile
-
-    # Look for .mrc files in the directory
-    mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
+    files = os.listdir(input_path)
     
-    if not mrc_files:
-        raise FileNotFoundError(f"No .mrc file found in {input_path}")
-    if len(mrc_files) > 1:
-        raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
+    #Supported extensions
+    supported_exts = ['.mrc', '.h5', '.npy', '.tif', '.tiff']
     
-    # Get the single .mrc file
-    mrc_path = os.path.join(input_path, mrc_files[0])
+    # Find files with supported extensions
+    valid_files = [f for f in files if os.path.splitext(f)[1].lower() in supported_exts]
+    
+    if not valid_files:
+        raise FileNotFoundError(f"No supported files found in {input_path}. Supported extensions: {supported_exts}")
 
-    # Open MRC file
-    with mrcfile.open(mrc_path, permissive=True) as mrc:
-        input_volume = mrc.data  
+    file_path = os.path.join(input_path, valid_files[0])
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    # Load depending on file type
+    if ext == '.mrc':
+        import mrcfile
+        with mrcfile.open(file_path, permissive=True) as mrc:
+            volume = mrc.data
+    elif ext in ['.tif', '.tiff']:
+        from tifffile import imread
+        volume = imread(file_path)
+    elif ext == '.npy':
+        volume = np.load(file_path)
+    elif ext == '.h5':
+        from elf.io import open_file
+        with open_file(input_path, "r") as f:
 
-    return input_volume
+            # Try to automatically derive the key with the raw data.
+            keys = list(f.keys())
+            if len(keys) == 1:
+                key = keys[0]
+            elif "data" in keys:
+                key = "data"
+            elif "raw" in keys:
+                key = "raw"
+
+            volume = f[key][:]
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
+    
+    return volume
 
 
 def get_volume(input_path: str) -> np.ndarray:

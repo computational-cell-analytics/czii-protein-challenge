@@ -141,6 +141,7 @@ def visualize_with_napari(raw_data, heatmap, peaks, subtomograms):
 
     #napari.run()
 
+
 def get_max_extent(peaks, heatmap):
     """get max dimensions for the bb that includes all proteins. Makes sure the max extent is not an outlier. """
 

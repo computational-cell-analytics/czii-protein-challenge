@@ -29,27 +29,55 @@ def load_detection_predictions(pred_path):
         points = json.load(f)
     return np.array(points)
 
+
 def get_non_zarr(input_path):
-    #TODO expand for other file types
+    """
+    Load a single volumetric file from a directory.
+    Supports .mrc, .h5, .npy, .tif/.tiff.
+    """
 
-    import mrcfile
-
-    # Look for .mrc files in the directory
-    mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
+    files = os.listdir(input_path)
     
-    if not mrc_files:
-        raise FileNotFoundError(f"No .mrc file found in {input_path}")
-    if len(mrc_files) > 1:
-        raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
+    #Supported extensions
+    supported_exts = ['.mrc', '.h5', '.npy', '.tif', '.tiff']
     
-    # Get the single .mrc file
-    mrc_path = os.path.join(input_path, mrc_files[0])
+    # Find files with supported extensions
+    valid_files = [f for f in files if os.path.splitext(f)[1].lower() in supported_exts]
+    
+    if not valid_files:
+        raise FileNotFoundError(f"No supported files found in {input_path}. Supported extensions: {supported_exts}")
 
-    # Open MRC file
-    with mrcfile.open(mrc_path, permissive=True) as mrc:
-        input_volume = mrc.data  
+    file_path = os.path.join(input_path, valid_files[0])
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    # Load depending on file type
+    if ext == '.mrc':
+        import mrcfile
+        with mrcfile.open(file_path, permissive=True) as mrc:
+            volume = mrc.data
+    elif ext in ['.tif', '.tiff']:
+        from tifffile import imread
+        volume = imread(file_path)
+    elif ext == '.npy':
+        volume = np.load(file_path)
+    elif ext == '.h5':
+        from elf.io import open_file
+        with open_file(input_path, "r") as f:
 
-    return input_volume
+            # Try to automatically derive the key with the raw data.
+            keys = list(f.keys())
+            if len(keys) == 1:
+                key = keys[0]
+            elif "data" in keys:
+                key = "data"
+            elif "raw" in keys:
+                key = "raw"
+
+            volume = f[key][:]
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
+    
+    return volume
 
 
 def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
@@ -456,8 +484,14 @@ def run_protein_classification_with_labels(
 ):
     os.makedirs(output_path, exist_ok=True)
 
-    # Load index to label mapping #TODO should I make this flexible?
-    with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
+    # Replace 'models' with 'training' and build path to idx_to_label.json; not ideal, but otherwise I'd have to add another argument parser. maybe thats better?
+    idx_file_path = os.path.join(
+        model_path.replace("/models/checkpoints/", "/training/"),
+        "idx_to_label.json"
+    )
+
+    # Load JSON
+    with open(idx_file_path, "r") as f:
         idx_to_label = json.load(f)
 
     all_sample_ids, all_preds, all_probs, all_truths = [], [], [], []
@@ -553,7 +587,7 @@ def main():
     )
     parser.add_argument(
         "--max_extent", type=int, required=True,
-        help="Size of the bounding box used during training."
+        help="Size of the bounding box used during training." #TODO should make this flexible?  what does get_max_extent in create_subtomogram do??
     )
     parser.add_argument(
         "--subtomo_output", "-sub_o", required=True, type=str,
@@ -619,8 +653,16 @@ def main():
             global_unmatched_info.update(unmatched_info)
 
         #Global evaluation
-        with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
+        # Replace 'models' with 'training' and build path to idx_to_label.json; not ideal, but otherwise I'd have to add another argument parser. maybe thats better?
+        idx_file_path = os.path.join(
+            args.model_path.replace("/models/checkpoints/", "/training/"),
+            "idx_to_label.json"
+        )
+
+        # Load JSON
+        with open(idx_file_path, "r") as f:
             idx_to_label = json.load(f)
+
         run_global_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, idx_to_label, global_num_unmatched, global_unmatched_info)
 
     else:

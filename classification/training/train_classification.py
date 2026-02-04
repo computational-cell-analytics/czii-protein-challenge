@@ -52,7 +52,7 @@ def train(testset=True, model_name= "protein_classification"):
 
     
     #TODO make this more automatic
-    max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39 or was it 35??
+    max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39 or was it 35?? wait what does get_max_extent in create_subtomogram do??
     halo=4
     print(f"Using bounding box size (with halo {halo}): {max_extent+halo}")
     patch_shape = (max_extent+halo, max_extent+halo, max_extent+halo)
