@@ -9,7 +9,7 @@ import zarr
 def width_to_sigma(width, eps, lower_bound, upper_bound):
     # shrink needs to be between 0 and 1
     sigma = np.sqrt(-(width**2) / (2*np.log(eps)))
-    #### bounding ####
+    #bounding 
     if lower_bound and upper_bound:
         if sigma < lower_bound:
             sigma = lower_bound
