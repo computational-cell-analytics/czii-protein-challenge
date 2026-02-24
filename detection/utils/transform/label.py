@@ -107,7 +107,7 @@ class HeatmapTransform:
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
 
-    def __call__(self, label_path, shape, bb_labels):
+    def __call__(self, label_path, shape, bb_labels, bb_for_loading=None):
         heatmap = get_label(
             label_path,
             shape,
@@ -130,7 +130,9 @@ class FlowTransform:
         self.sigma = sigma
         self.grid = grid
 
-    def __call__(self, label_path, patch_spatial_shape, bb_for_loading):
+    def __call__(self, label_path, shape, bb_labels=None, bb_for_loading=None):
+        patch_spatial_shape = shape[-3:]
+
         picks_folder = os.path.join(label_path, "Picks")
 
         json_files = [
