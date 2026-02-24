@@ -7,8 +7,8 @@ import torch.nn as nn
 # from torch_em.transform.augmentation import get_augmentations
 
 from .data_loader import create_data_loader
-from .heatmap_dataset import HeatmapDataset
-
+from .detection_dataset import DetectionDataset
+from ..transform import HeatmapFlowTransform
 
 class CombinedLoss(nn.Module):
     def __init__(self, heatmap_weight=1.0, flow_weight=0.1):
@@ -92,6 +92,7 @@ def supervised_training(
     lr: float = 1e-4,
     n_iterations: int = int(1e5),
     check: bool = False,
+    label_transform: Optional[callable] = None,
     out_channels: int = 5,  # 5 channels (1 heatmap + 4 flow) #had out_channels = 2 before adding the stereographic flow
     augmentations: Optional[bool] = False,
     eps: float = 1e-5,
@@ -103,7 +104,7 @@ def supervised_training(
     save_root: Optional[str] = None,
     n_samples_train: Optional[int] = None,
     n_samples_val: Optional[int] = None,
-    dataset_class=HeatmapDataset,
+    dataset_class=DetectionDataset,
     sampler=None,
     loss_fn=CombinedLoss(heatmap_weight=1.0, flow_weight=0.1),
     final_activation: Optional[str] = None,
@@ -130,8 +131,8 @@ def supervised_training(
         save_root: Folder where the checkpoint will be saved.
         n_samples_train: The number of samples for the training dataset.
         n_samples_val: The number of samples for the validation dataset.
-        dataset_class: The dataset class to use. By default `HeatmapDataset`, which creates a detection
-            heatmap for the CZII Cryo Challenge data, is used.
+        dataset_class: The dataset class to use. By default `DetectionDataset`, which creates a detection
+            heatmap and flow for the CZII Cryo Challenge data, is used.
         sampler: The sampler for rejecting invalid batches. Not used by default.
         loss_fn: The loss function. By default the combined loss for the flow prediction is used.
         final_activation: The activation applied to the last layer of the U-Net. By default no activation is used.
@@ -145,13 +146,25 @@ def supervised_training(
     else:
         raw_transform = None
         transform = None
+    
+    if label_transform is None:
+        label_transform = HeatmapFlowTransform(
+            eps=eps,
+            sigma=sigma,
+            lower_bound=lower_bound,
+            upper_bound=upper_bound,
+            flow_sigma=1.5,
+        )
 
     num_workers = 6  # Julias example TODO change?
+
+    #call label transform and pass on to loader -> dataset
 
     train_loader, val_loader, _ = create_data_loader(train_paths, train_label_paths,
                                                      val_paths, val_label_paths,
                                                      test_paths, test_label_paths,
-                                                     raw_transform=raw_transform, transform=transform,
+                                                     raw_transform=raw_transform, label_transform=label_transform,
+                                                     transform=transform,
                                                      patch_shape=patch_shape, num_workers=num_workers,
                                                      batch_size=batch_size, raw_key=raw_key,
                                                      eps=eps, sigma=sigma,

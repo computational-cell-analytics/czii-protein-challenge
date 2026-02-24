@@ -227,11 +227,11 @@ def main():
         np.save(output_file, heatmap)
         print(f"Heatmap saved to {output_file}")
 
-        '''import napari
+        import napari
         loaded_array = np.load(output_file)
         v = napari.Viewer()
         v.add_image(loaded_array, name= f"heatmap")
-        napari.run()'''
+        napari.run()
 
     else:
         print("No 0 zarr was found")

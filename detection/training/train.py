@@ -43,7 +43,7 @@ def find_zarr_or_mrc(base_path):
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):
 
     datasets = ["ExperimentRuns_faket_snr_0_12_0_2", "ExperimentRuns"]
-    model_name = "protein_detection_czii_v18"
+    model_name = "protein_detection_czii_v19"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
