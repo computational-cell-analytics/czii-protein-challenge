@@ -20,8 +20,11 @@ def _require_train_val_test_split(datasets, train_root, output_root, extension):
             continue
 
         ds_path = os.path.join(train_root, ds)
-        # need to check if the dataset contains files or folders (like eg for zarr)
-        if any(os.path.isfile(os.path.join(ds_path, f)) for f in os.listdir(ds_path)):
+        # need to check if the dataset contains files or folders (like eg for zarr) and ignore json files
+        if any(
+            os.path.isfile(os.path.join(ds_path, f)) and not f.endswith(".json")
+            for f in os.listdir(ds_path)
+        ):
             # If the dataset contains files
             file_paths = sorted(glob(os.path.join(ds_path, f"*.{extension}")))
             file_names = [os.path.basename(path) for path in file_paths]

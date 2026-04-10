@@ -43,9 +43,11 @@ def find_zarr_or_mrc(base_path):
 
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr", save_max_extent=True):
 
-    datasets = ["ExperimentRuns_faket_snr_0_12_0_2", "ExperimentRuns"]
+    datasets = ["ExperimentRuns"]
     synthetic_dataset = ["ExperimentRuns"] #used to save the max_extent information for the classification later
-    model_name = "protein_detection_czii_v19"
+    model_name = "protein_detection_czii_v20"
+
+    print(f"Training model {model_name}")
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -117,7 +119,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created. " \
                         "Only set to False if --no_max_extent is also set to False.")
     parser.add_argument("-me", "--save_max_extent", action='store_false', 
-                        help="Set to False if no max extent (needed for classification) should be saved automatically to the.")
+                        help="Set to False if no max extent (needed for classification) should not be saved automatically.")
     args = parser.parse_args()
     train(args.testset)
 

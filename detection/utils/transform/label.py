@@ -133,12 +133,11 @@ class FlowTransform:
     def __call__(self, label_path, shape, bb_labels=None, bb_for_loading=None):
         patch_spatial_shape = shape[-3:]
 
-        picks_folder = os.path.join(label_path, "Picks")
-
         json_files = [
-            os.path.join(picks_folder, f)
-            for f in os.listdir(picks_folder)
-            if f.endswith(".json")
+            os.path.join(root, f)
+            for root, _, files in os.walk(label_path)
+            for f in files
+            if f.endswith(".json") and f not in ("no_class.json", "albumin.json")
         ]
 
         coords, _ = parse_json_files(json_files)
