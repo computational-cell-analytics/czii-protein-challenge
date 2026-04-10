@@ -1,10 +1,10 @@
-import numpy as np
-from skimage.feature import blob_log, peak_local_max
+from skimage.feature import peak_local_max
 from .gridsearch import gridsearch
 
-from detection.config import ADJ_FACTOR
+from detection.config import ADJ_FACTOR, FLOW_SIGMA
 
-def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO do this properly
+
+def protein_detection(heatmap, json_val_path, model_path, threshold=None):
     """
     Detect protein coordinates from a heatmap and adjust them using stereographic flow predictions.
 
@@ -26,8 +26,8 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO
 
     if threshold is None:
         threshold = gridsearch(json_val_path, model_path) 
-    #smalles protein structure: "beta-amylase": 33.27
-    #bigges protein structure: "ribosome": 109.02
+    # smalles protein structure: "beta-amylase": 33.27
+    # bigges protein structure: "ribosome": 109.02
     adj_factor = ADJ_FACTOR
 
     # Find peaks in heatmap
@@ -39,31 +39,33 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO
 
     # Apply stereographic flow correction
     # Extract flow channels
-    flow_w = heatmap[1]  # stereographic scaling (TODO needed later?)
+    flow_w = heatmap[1]
     flow_z = heatmap[2]
     flow_y = heatmap[3]
     flow_x = heatmap[4]
 
+    s = FLOW_SIGMA
+
     # Adjust coordinates using predicted local flow
     adjusted_coords = []
     for z, y, x in pred_coords:
-        dz = flow_z[z, y, x]
-        dy = flow_y[z, y, x]
-        dx = flow_x[z, y, x]
+        w = flow_w[z, y, x]
+        vz_ = flow_z[z, y, x]
+        vy_ = flow_y[z, y, x]
+        vx_ = flow_x[z, y, x]
 
-        # Optionally apply stereographic scaling (if relevant)
-        # In Spotiflow, coordinates are typically adjusted directly by the flow values TODO
+        # like Spotiflow: using scaled stereographic projection with parameter s (sigma from training) to adjust coordinates
+        # can do it like this since my model is predicting the normalised flow calculated by the points_to_flow3d function from spotiflow
+        denom = 1.0 + w + 1e-8  # avoid division by zero
+
+        dz = s * vz_ / denom
+        dy = s * vy_ / denom
+        dx = s * vx_ / denom
+
         adj_z = z + dz
         adj_y = y + dy
         adj_x = x + dx
 
         adjusted_coords.append([float(adj_z), float(adj_y), float(adj_x)])
 
-
-    #TODO calculate size of each gaussians and save it in detections
-    '''detections.append({
-        'coordinates': pred_coords,
-        'size': sizes
-    })
-'''
     return adjusted_coords, threshold

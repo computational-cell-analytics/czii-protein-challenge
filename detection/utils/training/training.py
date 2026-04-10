@@ -10,6 +10,8 @@ from .data_loader import create_data_loader
 from .detection_dataset import DetectionDataset
 from ..transform import HeatmapFlowTransform
 
+from detection.config import FLOW_SIGMA
+
 class CombinedLoss(nn.Module):
     def __init__(self, heatmap_weight=1.0, flow_weight=0.1):
         super().__init__()
@@ -133,7 +135,7 @@ def supervised_training(
             sigma=sigma,
             lower_bound=lower_bound,
             upper_bound=upper_bound,
-            flow_sigma=1.5,
+            flow_sigma=FLOW_SIGMA,
         )
 
     num_workers = loader_kwargs.pop("num_workers", 4 * batch_size)
