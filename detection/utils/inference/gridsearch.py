@@ -11,7 +11,7 @@ from ..training.tiling_helper import parse_tiling
 from detection.data_processing.create_heatmap import parse_json_files
 import numpy as np
 
-from detection.config import ADJ_FACTOR
+from detection.config import ADJ_FACTOR, CZII_SMALLEST_PROTEIN_SIZE
 
 #TODO Do I want to make this more flexible??
 TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
@@ -150,22 +150,19 @@ def gridsearch(json_val_path, model_path):
 
         for thresh in tqdm(threshes):
 
-            #smalles protein structure: "beta-amylase": 33.27
-            #bigges protein structure: "ribosome": 109.02,
-            adj_factor=ADJ_FACTOR
+            adj_factor = ADJ_FACTOR
 
-            pred_coords = peak_local_max(pred, min_distance=int(33.27*adj_factor *0.9), threshold_abs=thresh)
+            pred_coords = peak_local_max(pred, min_distance=int(CZII_SMALLEST_PROTEIN_SIZE*adj_factor * 0.9), threshold_abs=thresh)
             _, _, f1, _, _, _ = metric_coords(label_coords, pred_coords) 
 
             data.append([f1, thresh])
             print(f"f1 and corresponding thresholds: {data}")
 
         #Alternative using list conprehension
-        '''#smalles protein structure: "beta-amylase": 33.27
-        #bigges protein structure: "ribosome": 109.02,
+        '''
         adj_factor = ADJ_FACTOR     
         data.extend([
-        [metric_coords(label_coords, blob_log(pred, min_sigma=33.27 * adj_factor * 0.9, 
+        [metric_coords(label_coords, blob_log(pred, min_sigma=CZII_SMALLEST_PROTEIN_SIZE * adj_factor * 0.9, 
                                             max_sigma=109.02 * adj_factor * 1.1, 
                                             threshold=thresh))[2], thresh]
         for thresh in tqdm(threshes)

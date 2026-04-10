@@ -1,7 +1,7 @@
 from skimage.feature import peak_local_max
 from .gridsearch import gridsearch
 
-from detection.config import ADJ_FACTOR, FLOW_SIGMA
+from detection.config import ADJ_FACTOR, FLOW_SIGMA, CZII_SMALLEST_PROTEIN_SIZE
 
 
 def protein_detection(heatmap, json_val_path, model_path, threshold=None):
@@ -26,14 +26,13 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None):
 
     if threshold is None:
         threshold = gridsearch(json_val_path, model_path) 
-    # smalles protein structure: "beta-amylase": 33.27
-    # bigges protein structure: "ribosome": 109.02
+    
     adj_factor = ADJ_FACTOR
 
     # Find peaks in heatmap
     pred_coords = peak_local_max(
         heatmap[0],
-        min_distance=int(33.27 * adj_factor * 0.9),
+        min_distance=int(CZII_SMALLEST_PROTEIN_SIZE * adj_factor * 0.9),
         threshold_abs=threshold
     )
 
