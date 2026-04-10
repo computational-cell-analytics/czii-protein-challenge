@@ -6,6 +6,7 @@ import argparse
 import os
 import zarr
 
+from detection.config import ADJ_FACTOR
 
 def width_to_sigma(width, eps, lower_bound, upper_bound):
     # shrink needs to be between 0 and 1
@@ -99,7 +100,7 @@ def save_max_extent_to_json(TRAIN_ROOT, synthetic_dataset):
         # Find the maximum size of the protein structures used in the synthetic dataset
         width_dict = create_width_dict()
         max_width = max(width_dict.values())
-        adj_factor = 0.3  # TODO: make flexible? -> make as argument, leave as is for now
+        adj_factor = ADJ_FACTOR
         width_info = math.ceil(max_width * adj_factor)  # round up to nearest integer
 
         # Get the path to the synthetic dataset

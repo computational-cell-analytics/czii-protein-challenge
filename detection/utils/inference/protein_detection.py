@@ -2,6 +2,7 @@ import numpy as np
 from skimage.feature import blob_log, peak_local_max
 from .gridsearch import gridsearch
 
+from detection.config import ADJ_FACTOR
 
 def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO do this properly
     """
@@ -26,9 +27,8 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO
     if threshold is None:
         threshold = gridsearch(json_val_path, model_path) 
     #smalles protein structure: "beta-amylase": 33.27
-    #bigges protein structure: "ribosome": 109.02,
-    #0.3 is the factor to match the PDB size to the experimental data size
-    adj_factor=0.3 #TODO implement this as an argument, also when creating heatmap
+    #bigges protein structure: "ribosome": 109.02
+    adj_factor = ADJ_FACTOR
 
     # Find peaks in heatmap
     pred_coords = peak_local_max(

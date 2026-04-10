@@ -11,6 +11,8 @@ from ..training.tiling_helper import parse_tiling
 from detection.data_processing.create_heatmap import parse_json_files
 import numpy as np
 
+from detection.config import ADJ_FACTOR
+
 #TODO Do I want to make this more flexible??
 TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
 LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/"
@@ -150,8 +152,7 @@ def gridsearch(json_val_path, model_path):
 
             #smalles protein structure: "beta-amylase": 33.27
             #bigges protein structure: "ribosome": 109.02,
-            #0.3 is the factor to match the PDB size to the experimental data size
-            adj_factor=0.3 #TODO implement this as an argument, also when creating heatmap
+            adj_factor=ADJ_FACTOR
 
             pred_coords = peak_local_max(pred, min_distance=int(33.27*adj_factor *0.9), threshold_abs=thresh)
             _, _, f1, _, _, _ = metric_coords(label_coords, pred_coords) 
@@ -162,8 +163,7 @@ def gridsearch(json_val_path, model_path):
         #Alternative using list conprehension
         '''#smalles protein structure: "beta-amylase": 33.27
         #bigges protein structure: "ribosome": 109.02,
-        #0.3 is the factor to match the PDB size to the experimental data size
-        adj_factor=0.3 #TODO implement this as an argument, also when creating heatmap      
+        adj_factor = ADJ_FACTOR     
         data.extend([
         [metric_coords(label_coords, blob_log(pred, min_sigma=33.27 * adj_factor * 0.9, 
                                             max_sigma=109.02 * adj_factor * 1.1, 

@@ -14,6 +14,7 @@ from classification.training import load_peaks
 from classification.data_processing import extract_subtomograms
 from classification.utils import protein_classification
 
+#TODO update this script if needed
 
 def get_volume(input_path: str) -> np.ndarray:
     zarr_file = zarr.open(os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"), mode='r')
