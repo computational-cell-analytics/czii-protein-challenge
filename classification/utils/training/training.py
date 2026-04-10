@@ -113,10 +113,8 @@ def classification_training(
         kwargs: Additional args for trainer.
     """
     
-
     num_workers = kwargs.pop("num_workers", 4 * batch_size)
 
-    #TODO do I also want to get the test_loader and store the data from it as subtomograms somewhere?
     train_loader, val_loader, test_loader, idx_to_label = create_data_loader(
         train_data=train_paths,
         val_data=val_paths,
