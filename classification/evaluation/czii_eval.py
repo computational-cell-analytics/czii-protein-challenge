@@ -2,7 +2,7 @@
 Derived from:
 https://github.com/cellcanvas/album-catalog/blob/main/solutions/copick/compare-picks/solution.py
 """
-
+#Installed webknossos python library in the synapse-net env and it downgraded psutil from 7.0.0 to 6.0.0, but copick needs at least 7.0.0 version, so there might come an error
 
 import argparse
 import os

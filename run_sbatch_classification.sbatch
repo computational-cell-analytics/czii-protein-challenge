@@ -9,10 +9,4 @@
 
 #/scratch/usr/nimsmuth/mambaforge/envs/synapse-net
 #/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-net
-/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-net/bin/python /user/muth9/u12095/czii-protein-challenge/classification/inference/run_protein_classification_with_predicted_detections.py \
- -i /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/tomograms_VoxelSpacing10 \
- -l /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth \
- -o /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/classification/protein_classification_czii_v35/public_test_dataset_predictions_by_v18/test \
- -m /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models/checkpoints/protein_classification_czii_v35/ \
- --max_extent 39 -sub_o /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/classification/protein_classification_czii_v35/public_test_dataset_predictions_by_v18/test/subtomograms \
- -p /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/detections/protein_detection_czii_v18/public_test_dataset
+/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-net/bin/python /user/muth9/u12095/czii-protein-challenge/classification/training/train_classification.py

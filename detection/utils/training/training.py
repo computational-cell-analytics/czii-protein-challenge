@@ -29,26 +29,6 @@ class CombinedLoss(nn.Module):
         total_loss = self.heatmap_weight * l_h + self.flow_weight * l_f
         return total_loss
 
-#TODO
-'''#Julias code ... don't know yet if I need to chage it ...
-def get_in_channels(image_path):
-    # Load the first image to determine the number of channels
-    image = np.asarray(imread(image_path))
-
-    # Check if the first image is grayscale or RGB
-    if len(image.shape) == 2:
-        in_channels = 1
-        # print(f"About to process grayscale images")
-    elif image.shape[-1] == 4:
-        in_channels = 3
-        # print(f"About to process RGB images")
-    else:
-        in_channels = image.shape[-1]
-        # print(f"About to process images of dimensions = {image.shape}")
-
-    return in_channels
-'''
-
 
 def get_3d_model(
     in_channels: int,
@@ -156,7 +136,7 @@ def supervised_training(
             flow_sigma=1.5,
         )
 
-    num_workers = 6  # Julias example TODO change?
+    num_workers = loader_kwargs.pop("num_workers", 4 * batch_size)
 
     #call label transform and pass on to loader -> dataset
 

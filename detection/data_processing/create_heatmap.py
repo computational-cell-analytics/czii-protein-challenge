@@ -1,6 +1,7 @@
 import numpy as np
 from skimage.filters import gaussian
 import json
+import math
 import argparse
 import os
 import zarr
@@ -92,6 +93,33 @@ def create_width_dict():
         "thyroglobulin": 76.47,
         "virus-like-particle": 79.07
     }
+
+
+def save_max_extent_to_json(TRAIN_ROOT, synthetic_dataset):
+        # Find the maximum size of the protein structures used in the synthetic dataset
+        width_dict = create_width_dict()
+        max_width = max(width_dict.values())
+        adj_factor = 0.3  # TODO: make flexible? -> make as argument, leave as is for now
+        width_info = math.ceil(max_width * adj_factor)  # round up to nearest integer
+
+        # Get the path to the synthetic dataset
+        experiment_folder = os.path.join(TRAIN_ROOT, synthetic_dataset[0])
+        os.makedirs(experiment_folder, exist_ok=True)  # ensure folder exists
+
+        info_file_path = os.path.join(experiment_folder, "max_extent.json")
+
+        # Check if file already exists
+        if os.path.exists(info_file_path):
+            with open(info_file_path, "r") as f:
+                old_data = json.load(f)
+            old_value = old_data.get("max_extent")
+            print(f"Old saved max_extent: {old_value}. Overwriting it with new max_extent: {width_info}")
+
+        # Save the new value
+        with open(info_file_path, "w") as f:
+            json.dump({"max_extent": width_info}, f)
+
+        print(f"Saved max_width*{adj_factor} = {width_info} to {info_file_path}")
 
 
 def precompute_gaussians(width_dict, eps, lower_bound, upper_bound):

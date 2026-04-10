@@ -1,8 +1,10 @@
 import os
 import argparse
+import json
 
 from detection.utils import get_paths  
 from detection.utils import supervised_training 
+from detection.data_processing import save_max_extent_to_json
 
 TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
 LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/"
@@ -39,10 +41,10 @@ def find_zarr_or_mrc(base_path):
     # Return the first .mrc found
     return mrc_files[0]
 
-
-def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):
+def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr", save_max_extent=True):
 
     datasets = ["ExperimentRuns_faket_snr_0_12_0_2", "ExperimentRuns"]
+    synthetic_dataset = ["ExperimentRuns"] #used to save the max_extent information for the classification later
     model_name = "protein_detection_czii_v19"
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
@@ -82,7 +84,10 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     print(f"train_paths {train_paths}")
     print(f"val_paths{val_paths}")
     print(f"test_paths {test_paths}")
-    
+
+    if save_max_extent:
+        save_max_extent_to_json(TRAIN_ROOT, synthetic_dataset)
+        
     supervised_training(
         name=model_name,
         train_paths=train_paths,
@@ -103,12 +108,16 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         test_paths=test_paths,
         test_label_paths=test_label_paths,
         save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
+        num_workers=8, #TODO maybe can go bigger here
     )
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
+    parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created. " \
+                        "Only set to False if --no_max_extent is also set to False.")
+    parser.add_argument("-me", "--save_max_extent", action='store_false', 
+                        help="Set to False if no max extent (needed for classification) should be saved automatically to the.")
     args = parser.parse_args()
     train(args.testset)
 

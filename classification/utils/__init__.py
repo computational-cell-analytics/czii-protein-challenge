@@ -1,4 +1,6 @@
 from .training.data_loader import create_data_loader
 from .training.training import classification_training, ClassificationMetric
+from .training.trainer import default_classification_trainer, ProteinClassificationTrainer
 from .training.classification_dataset import ClassificationDataset
-from .inference.protein_classification import protein_classification
+from .inference.protein_classification import protein_classification, get_model
+from .inference.utils import preprocess_tomo_with_labels, preprocess_tomo_with_predictions

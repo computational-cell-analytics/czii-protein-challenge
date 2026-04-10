@@ -153,17 +153,6 @@ def gridsearch(json_val_path, model_path):
             #0.3 is the factor to match the PDB size to the experimental data size
             adj_factor=0.3 #TODO implement this as an argument, also when creating heatmap
 
-            #TODO decide on blob_log or peak_local_max; blob_log is SUPER slow
-            '''# Start timing
-            start_time = time.time()
-
-            pred_coords_sigma = blob_log(pred, min_sigma=33.27*adj_factor *0.9, max_sigma=109.02*adj_factor*1.1, threshold=thresh) 
-            pred_coords = pred_coords_sigma[:, :-1]  # This removes the last column (sigma)
-
-            # Stop timing
-            elapsed_time = time.time() - start_time
-            print(f"blob_log took {elapsed_time:.4f} seconds")
-            '''
             pred_coords = peak_local_max(pred, min_distance=int(33.27*adj_factor *0.9), threshold_abs=thresh)
             _, _, f1, _, _, _ = metric_coords(label_coords, pred_coords) 
 

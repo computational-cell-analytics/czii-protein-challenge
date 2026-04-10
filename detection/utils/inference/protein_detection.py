@@ -29,9 +29,6 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None): #TODO
     #bigges protein structure: "ribosome": 109.02,
     #0.3 is the factor to match the PDB size to the experimental data size
     adj_factor=0.3 #TODO implement this as an argument, also when creating heatmap
-    #TODO decide on blob_log or peak_local_max; blob_log is SUPER slow
-    '''pred_coords = blob_log(heatmap, min_sigma=33.27*adj_factor, max_sigma=109.02*adj_factor, threshold=threshold) 
-    pred_coords = pred_coords[:, 1:-1]'''
 
     # Find peaks in heatmap
     pred_coords = peak_local_max(

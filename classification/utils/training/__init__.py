@@ -4,3 +4,4 @@ from .training import classification_training, ClassificationMetric
 from .cryoET_augmentation import CryoETAugment
 from .normalization import CryoETNormalize
 from .loss import FocalLossWithLabelSmoothing
+from .trainer import default_classification_trainer, ProteinClassificationTrainer

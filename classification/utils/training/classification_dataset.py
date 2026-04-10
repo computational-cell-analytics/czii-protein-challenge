@@ -74,7 +74,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
         print(f"Initialized dataset with {len(self.targets)} subtomograms from {len(paths)} tomograms")
 
     def __len__(self):
-        return len(self.targets)
+        return len(self.coords)
 
     def __getitem__(self, index):
         path = self.paths[index]

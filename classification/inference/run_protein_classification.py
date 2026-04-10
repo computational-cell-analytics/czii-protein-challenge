@@ -1,7 +1,6 @@
 import argparse
 import os
 import h5py
-import zarr
 import json
 import numpy as np
 import pandas as pd
@@ -10,131 +9,10 @@ from sklearn.manifold import TSNE
 from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 import random
+import warnings
 
-from typing import List, Tuple
-
-from classification.data_processing import extract_subtomograms
-from classification.utils import protein_classification
-from classification.training import get_coords_and_targets
-
-
-def get_non_zarr(input_path):
-    """
-    Load a single volumetric file from a directory.
-    Supports .mrc, .h5, .npy, .tif/.tiff.
-    """
-
-    files = os.listdir(input_path)
-    
-    #Supported extensions
-    supported_exts = ['.mrc', '.h5', '.npy', '.tif', '.tiff']
-    
-    # Find files with supported extensions
-    valid_files = [f for f in files if os.path.splitext(f)[1].lower() in supported_exts]
-    
-    if not valid_files:
-        raise FileNotFoundError(f"No supported files found in {input_path}. Supported extensions: {supported_exts}")
-
-    file_path = os.path.join(input_path, valid_files[0])
-    ext = os.path.splitext(file_path)[1].lower()
-    
-    # Load depending on file type
-    if ext == '.mrc':
-        import mrcfile
-        with mrcfile.open(file_path, permissive=True) as mrc:
-            volume = mrc.data
-    elif ext in ['.tif', '.tiff']:
-        from tifffile import imread
-        volume = imread(file_path)
-    elif ext == '.npy':
-        volume = np.load(file_path)
-    elif ext == '.h5':
-        from elf.io import open_file
-        with open_file(input_path, "r") as f:
-
-            # Try to automatically derive the key with the raw data.
-            keys = list(f.keys())
-            if len(keys) == 1:
-                key = keys[0]
-            elif "data" in keys:
-                key = "data"
-            elif "raw" in keys:
-                key = "raw"
-
-            volume = f[key][:]
-    else:
-        raise ValueError(f"Unsupported file type: {ext}")
-    
-    return volume
-
-
-def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
-    if zarr_:
-        # Recursive search for .zarr folders
-        zarr_folders = []
-        for root, dirs, files in os.walk(input_path):
-            for d in dirs:
-                if d.endswith(".zarr"):
-                    zarr_folders.append(os.path.join(root, d))
-        
-        if not zarr_folders:
-            raise FileNotFoundError(f"No .zarr folder found under {input_path}")
-        
-        # Prefer denoised.zarr if it exists
-        zarr_dir = next((f for f in zarr_folders if os.path.basename(f) == "denoised.zarr"), zarr_folders[0])
-        
-        # Append "0" subfolder
-        zarr_path = os.path.join(zarr_dir, "0")
-        print(f"Using volume path: {zarr_path}")
-        if not os.path.exists(zarr_path):
-            raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
-        
-        # Open and load volume
-        zarr_file = zarr.open(zarr_path, mode="r")
-        volume = zarr_file[:]
-        
-    else:
-        volume = get_non_zarr(input_path)
-    
-    return volume
-
-
-def preprocess_tomo_with_labels(
-    tomo_paths: List[str],
-    labels_root: str,
-    max_extent: int,
-    subtomo_output: str
-) -> Tuple[List[str], List[str]]:
-    """
-    Extract subtomograms at labeled coordinates and save them as .h5 files.
-
-    Returns:
-        file_paths: list of .h5 file paths
-        labels: list of corresponding ground-truth labels (one per file)
-    """
-    coords_all, targets_all = get_coords_and_targets(tomo_paths, labels_root)
-    os.makedirs(subtomo_output, exist_ok=True)
-
-    file_paths = []
-    labels = []
-
-    for tomo_path, coords, targets in zip(tomo_paths, coords_all, targets_all):
-        experiment_name = os.path.basename(tomo_path)
-        raw_volume = get_volume(tomo_path, zarr_=True)
-
-        subtomograms, valid_coords, targets = extract_subtomograms(raw_volume, coords, max_extent, targets=targets)
-
-        for cube, (x, y, z), target in zip(subtomograms, valid_coords, targets):
-            filename = f"{experiment_name}_x{x}_y{y}_z{z}.h5"
-            filepath = os.path.join(subtomo_output, filename)
-
-            with h5py.File(filepath, "w") as f:
-                f.create_dataset("raw", data=cube, compression="lzf")
-
-            file_paths.append(filepath)
-            labels.append(target)
-
-    return file_paths, labels
+from classification.utils import protein_classification, get_model
+from classification.utils import preprocess_tomo_with_labels
 
 
 def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label):
@@ -187,26 +65,19 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     report = classification_report(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     with open(os.path.join(output_path, f"classification_report_{name}.txt"), "w") as f:
         f.write(report)
-
-
-def run_global_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, idx_to_label):
-    run_full_evaluation(global_ids, global_truths, global_preds, global_probs, output_path, "ALL", idx_to_label)
-
+        
 
 def run_protein_classification_with_labels(
     input_files,
     labels,
     output_path,
-    model_path,
+    model,
+    idx_to_label,
     tomo_name,
     batch_size=16,
     save_full_results=True
 ):
     os.makedirs(output_path, exist_ok=True)
-
-    # Load int to label mapping
-    with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
-        idx_to_label = json.load(f)
 
     all_sample_ids, all_preds, all_probs, all_truths = [], [], [], []
 
@@ -222,22 +93,186 @@ def run_protein_classification_with_labels(
             truths_batch.append(label)
 
         cubes = np.stack(cubes, axis=0)
-        probs, preds = protein_classification(cubes, model_path, EfficientNet=False)
+        probs, preds = protein_classification(cubes, model, EfficientNet=False)
 
         all_sample_ids.extend(sample_ids)
         all_preds.extend(preds)
         all_probs.extend(probs.tolist())
         all_truths.extend(truths_batch)
 
-    # Convert int preds to labels
-    all_pred_labels = [idx_to_label[str(p)] for p in all_preds]
-    all_truth_labels = [idx_to_label[str(t)] if str(t) in idx_to_label else t for t in all_truths]
+    # Convert preds to labels
+    all_pred_labels = [idx_to_label[p] for p in all_preds]
+    all_truth_labels = [idx_to_label[t] if str(t) in idx_to_label else t for t in all_truths]
 
     if save_full_results:
         # Full evaluation on all subtomograms
         run_full_evaluation(all_sample_ids, all_truth_labels, all_pred_labels, all_probs, output_path, tomo_name, idx_to_label)
 
     return all_sample_ids, all_truth_labels, all_pred_labels, all_probs
+
+
+def run_multiple_mode(args):
+    model_path = args.model_path
+
+    if model_path.endswith("best.pt"):
+        model_path = os.path.split(model_path)[0]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model, checkpoint = get_model(
+            model_path=model_path,
+            device="cpu",
+            EfficientNet=False
+        )
+    
+    init_data = checkpoint['init']
+
+    # access custom parameters
+    patch_shape = init_data.get('patch_shape')
+    idx_to_label = init_data.get('idx_to_label')
+    idx_to_label = {k: str(v) for k, v in idx_to_label.items()}
+
+    print(f"Patch shape: {patch_shape}")
+    print(f"Index to label mapping: {idx_to_label}")
+
+    max_extent = patch_shape[0]
+    halo = 0
+
+    '''#backup
+    if idx_to_label is None:
+        print("needed idx_to_lable backup")
+        # Replace 'models/checkpoints/' with 'training' and build path to idx_to_label.json; not ideal, but otherwise I'd have to add another argument parser. maybe thats better?
+        idx_file_path = os.path.join(
+            args.model_path.replace("/models/checkpoints/", "/training/"),
+            "idx_to_label.json"
+        )
+
+        # Load JSON
+        with open(idx_file_path, "r") as f:
+            idx_to_label = json.load(f)
+    
+    if max_extent is None:
+        print("no max_extent")
+        max_extent=33
+        halo=None'''
+
+    global_ids, global_truths, global_preds, global_probs = [], [], [], []
+
+    # Collect all tomogram subfolders
+    tomogram_folders = [
+        os.path.join(args.input_path, sf)
+        for sf in os.listdir(args.input_path)
+        if os.path.isdir(os.path.join(args.input_path, sf))
+    ]
+
+    # Pick 10% of tomograms for per-tomogram evaluation
+    n_eval = max(1, int(len(tomogram_folders) * 0.1))
+    eval_tomos = set(random.sample(tomogram_folders, n_eval))
+
+    for subfolder_path in tomogram_folders:
+        tomo_paths = [subfolder_path]
+
+        print(f"Extracting subtomograms with labels from {subfolder_path}...")
+        print(f"using halo of {halo}")
+        subtomo_files, labels = preprocess_tomo_with_labels(
+            tomo_paths,
+            args.labels_root,
+            max_extent,
+            args.subtomo_output,
+            halo=halo
+        )
+
+        tomo_name = os.path.basename(subfolder_path)
+
+        print(f"Classifying {len(subtomo_files)} subtomograms from {subfolder_path}...")
+        sample_ids, truths, preds, probs = run_protein_classification_with_labels(
+            subtomo_files,
+            labels,
+            args.output_path,
+            model,
+            idx_to_label,
+            tomo_name=tomo_name,
+            batch_size=args.batch_size,
+            save_full_results=(subfolder_path in eval_tomos)  # only full eval for 10% tomograms
+        )
+
+        global_ids.extend(sample_ids)
+        global_truths.extend(truths)
+        global_preds.extend(preds)
+        global_probs.extend(probs)
+
+    # run global evaluation
+    run_full_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, "ALL", idx_to_label)
+
+
+def run_single_mode(args):
+    model_path = args.model_path
+
+    if model_path.endswith("best.pt"):
+        model_path = os.path.split(model_path)[0]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model, checkpoint = get_model(
+            model_path=model_path,
+            device="cpu",
+            EfficientNet=False
+        )
+    init_data = checkpoint['init']
+
+    # access custom parameters
+    patch_shape = init_data.get('patch_shape')
+    idx_to_label = init_data.get('idx_to_label')
+    idx_to_label = {k: str(v) for k, v in idx_to_label.items()}
+
+    print(f"Patch shape: {patch_shape}")
+    print(f"Index to label mapping: {idx_to_label}")
+
+    max_extent = patch_shape[0]
+    halo = 0
+
+    '''#backup
+    if idx_to_label is None:
+        print("needed idx_to_lable backup")
+        # Replace 'models/checkpoints/' with 'training' and build path to idx_to_label.json; not ideal, but otherwise I'd have to add another argument parser. maybe thats better?
+        idx_file_path = os.path.join(
+            args.model_path.replace("/models/checkpoints/", "/training/"),
+            "idx_to_label.json"
+        )
+
+        # Load JSON
+        with open(idx_file_path, "r") as f:
+            idx_to_label = json.load(f)
+    
+    if max_extent is None:
+        print("no max_extent")
+        max_extent=33
+        halo=None'''
+
+    tomo_paths = [args.input_path]
+
+    print("Extracting subtomograms with labels...")
+    subtomo_files, labels = preprocess_tomo_with_labels(
+        tomo_paths,
+        args.labels_root,
+        max_extent,
+        args.subtomo_output,
+        halo=halo
+    )
+
+    tomo_name = os.path.basename(args.input_path)
+
+    print(f"Classifying {len(subtomo_files)} subtomograms...")
+    run_protein_classification_with_labels(
+        subtomo_files,
+        labels,
+        args.output_path,
+        model,
+        idx_to_label,
+        tomo_name=tomo_name,
+        batch_size=args.batch_size,
+        save_full_results=True  # full evaluation in single mode
+    )
 
 
 def main():
@@ -259,10 +294,6 @@ def main():
         help="Path to trained model."
     )
     parser.add_argument(
-        "--max_extent", type=int, required=True,
-        help="Size of the bounding box used during training." #TODO should make this flexible?  what does get_max_extent in create_subtomogram do??
-    )
-    parser.add_argument(
         "--subtomo_output", "-sub_o", required=True, type=str,
         help="Where to store intermediate subtomogram .h5 files."
     )
@@ -278,72 +309,9 @@ def main():
     args = parser.parse_args()
     
     if args.multiple:
-        global_ids, global_truths, global_preds, global_probs = [], [], [], []
-
-        # Collect all tomogram subfolders
-        tomogram_folders = [os.path.join(args.input_path, sf) for sf in os.listdir(args.input_path) if os.path.isdir(os.path.join(args.input_path, sf))]
-
-        # Pick 10% of tomograms for per-tomogram evaluation
-        n_eval = max(1, int(len(tomogram_folders) * 0.1))
-        eval_tomos = set(random.sample(tomogram_folders, n_eval))
-
-        for subfolder_path in tomogram_folders:
-            tomo_paths = [subfolder_path]
-
-            print(f"Extracting subtomograms with labels from {subfolder_path}...")
-            subtomo_files, labels = preprocess_tomo_with_labels(
-                tomo_paths,
-                args.labels_root,
-                args.max_extent,
-                args.subtomo_output
-            )
-
-            tomo_name = os.path.basename(subfolder_path)
-
-            print(f"Classifying {len(subtomo_files)} subtomograms from {subfolder_path}...")
-            sample_ids, truths, preds, probs = run_protein_classification_with_labels(
-                subtomo_files,
-                labels,
-                args.output_path,
-                args.model_path,
-                tomo_name=tomo_name,
-                batch_size=args.batch_size,
-                save_full_results=(subfolder_path in eval_tomos)  # only full eval for 10% tomograms
-            )
-
-            global_ids.extend(sample_ids)
-            global_truths.extend(truths)
-            global_preds.extend(preds)
-            global_probs.extend(probs)
-
-        # Global evaluation
-        with open("/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v21/idx_to_label.json", "r") as f:
-            idx_to_label = json.load(f)
-        run_global_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, idx_to_label)
-
+        run_multiple_mode(args)
     else:
-        tomo_paths = [args.input_path]
-
-        print("Extracting subtomograms with labels...")
-        subtomo_files, labels = preprocess_tomo_with_labels(
-            tomo_paths,
-            args.labels_root,
-            args.max_extent,
-            args.subtomo_output
-        )
-
-        tomo_name = os.path.basename(args.input_path)
-
-        print(f"Classifying {len(subtomo_files)} subtomograms...")
-        run_protein_classification_with_labels(
-            subtomo_files,
-            labels,
-            args.output_path,
-            args.model_path,
-            tomo_name=tomo_name,
-            batch_size=args.batch_size,
-            save_full_results=True  # full evaluation in single mode
-        )
+        run_single_mode(args)
 
     print("Finished classification with label evaluation!")
 

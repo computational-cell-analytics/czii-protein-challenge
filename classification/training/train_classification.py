@@ -5,8 +5,8 @@ import torch
 import json
 
 from torch_em.classification.classification_logger import ClassificationLogger
-from torch_em.classification.classification_trainer import ClassificationTrainer
 
+from classification.utils.training import ProteinClassificationTrainer
 from classification.training import get_paths
 from classification.utils import classification_training, ClassificationMetric, ClassificationDataset
 from classification.utils.training import FocalLossWithLabelSmoothing
@@ -50,10 +50,28 @@ def train(testset=True, model_name= "protein_classification"):
     val_paths = get_paths("val", datasets, TRAIN_ROOT, output_path, testset=testset)
     test_paths = get_paths("test", datasets, TRAIN_ROOT, output_path, testset=testset) if testset else []
 
-    
-    #TODO make this more automatic
-    max_extent=39 #TODO check what is the biggest size from czi data/ simulation #39 or was it 35?? wait what does get_max_extent in create_subtomogram do??
-    halo=4
+    # Default value if no max_extent.json is found
+    max_extent = 39
+    found_values = []
+
+    #search for saved information about max_extent (saved in detection part)
+    #if there are multiple max_extent.json, keep the largest
+    for dataset in datasets:
+        dataset_folder = os.path.join(TRAIN_ROOT, dataset)
+        info_file_path = os.path.join(dataset_folder, "max_extent.json")
+
+        if os.path.exists(info_file_path):
+            with open(info_file_path, "r") as f:
+                data = json.load(f)
+            value = data.get("max_extent")
+            if value is not None:
+                found_values.append(value)
+                print(f"Found max_extent={value} in {dataset}")
+
+    if found_values:
+        max_extent = max(found_values)
+
+    halo=4 #TODO should I keep it at 4 or make it flexible and proportional to max_extent
     print(f"Using bounding box size (with halo {halo}): {max_extent+halo}")
     patch_shape = (max_extent+halo, max_extent+halo, max_extent+halo)
     
@@ -63,6 +81,8 @@ def train(testset=True, model_name= "protein_classification"):
         label_smoothing=0.1,
     )
 
+    print(f"Training model {model_name}")
+    
     idx_to_label = classification_training(
         name=model_name,
         train_paths=train_paths,
@@ -74,16 +94,17 @@ def train(testset=True, model_name= "protein_classification"):
         batch_size=64,
         lr=1e-4,
         logger=ClassificationLogger,
-        trainer_class=ClassificationTrainer,
-        n_iterations=1.5e3,
+        trainer_class=ProteinClassificationTrainer,
+        n_iterations=100, #1.5e-3
         out_channels=n_classes,
         in_channels=in_channels,
-        loss= focal_loss, #torch.nn.CrossEntropyLoss(),#focal_loss,
+        loss=focal_loss, #torch.nn.CrossEntropyLoss(),#focal_loss,
         metric=ClassificationMetric(),
         augmentations=get_augmentation(),
         normalization=get_normalization(), #get_normalization(), None
         save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
         dataset_class=ClassificationDataset,
+        num_workers=8, #TODO maybe can go bigger here
     )
 
     mapping_file = os.path.join(output_path, "idx_to_label.json")
@@ -96,7 +117,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v37"
+    model_name = "protein_classification_czii_v41"
     train(args.testset, model_name)
 
 

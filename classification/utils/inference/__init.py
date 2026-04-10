@@ -1,1 +1,2 @@
-from .protein_classification import protein_classification
+from .protein_classification import protein_classification,get_model
+from .utils import preprocess_tomo_with_labels, preprocess_tomo_with_predictions

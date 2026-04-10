@@ -6,10 +6,11 @@ import torch
 import torch_em
 
 from torch_em.classification.classification_logger import ClassificationLogger
-from torch_em.classification.classification_trainer import ClassificationTrainer
+from .trainer import ProteinClassificationTrainer
 
 from .data_loader import create_data_loader
 from .classification_dataset import ClassificationDataset
+from .trainer import default_classification_trainer
 
 from torch_em.model.resnet3d import resnet3d_18
 import torch.nn as nn
@@ -71,7 +72,7 @@ def classification_training(
     batch_size: int = 1,
     lr: float = 1e-4,
     logger=ClassificationLogger,
-    trainer_class=ClassificationTrainer,
+    trainer_class=ProteinClassificationTrainer,
     n_iterations: int = int(1e5),
     check: bool = False,
     out_channels: int = 2,
@@ -113,9 +114,9 @@ def classification_training(
     """
     
 
-    num_workers = 6  #TODO using this in location training as well, check if it should be different
+    num_workers = kwargs.pop("num_workers", 4 * batch_size)
 
-    #TODO actually get the test_loader and store the data from it as subtomograms somewhere, is this possible?
+    #TODO do I also want to get the test_loader and store the data from it as subtomograms somewhere?
     train_loader, val_loader, test_loader, idx_to_label = create_data_loader(
         train_data=train_paths,
         val_data=val_paths,
@@ -151,7 +152,7 @@ def classification_training(
     loss = torch.nn.CrossEntropyLoss() if loss is None else loss
     metric = ClassificationMetric() if metric is None else metric
 
-    trainer = torch_em.default_segmentation_trainer(
+    trainer = default_classification_trainer(
         name=name,
         model=model,
         train_loader=train_loader,
@@ -165,9 +166,11 @@ def classification_training(
         metric=metric,
         logger=logger,
         trainer_class=trainer_class,
+        patch_shape=patch_shape,
+        idx_to_label=idx_to_label,
         **kwargs,
     )
-
+    
     trainer.fit(n_iterations)
 
     return idx_to_label
