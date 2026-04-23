@@ -148,7 +148,7 @@ def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_boun
         os.path.join(root, f)
         for root, _, files in os.walk(json_folder)
         for f in files
-        if f.endswith(".json") and f not in ("no_class.json", "albumin.json")
+        if f.endswith(".json") and f not in ("no_class.json", "albumin.json", "actin.json", "mt.json")
     ]
     coordinates, protein_types = parse_json_files(json_files)
     width_dict = create_width_dict()

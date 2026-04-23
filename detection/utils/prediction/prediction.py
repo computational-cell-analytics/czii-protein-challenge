@@ -8,6 +8,7 @@ import torch
 import torch_em
 
 from torch_em.util.prediction import predict_with_halo
+from torch_em.transform.raw import standardize
 
 
 def get_prediction_torch_em(
@@ -72,7 +73,7 @@ def get_prediction_torch_em(
         pred = predict_with_halo(
             input_volume, model, gpu_ids=[device],
             block_shape=block_shape, halo=halo,
-            preprocess=None,
+            preprocess=standardize,
         )
     if verbose:
         print("Prediction time in", time.time() - t0, "s")

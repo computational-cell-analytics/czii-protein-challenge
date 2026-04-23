@@ -10,10 +10,11 @@ from classification.utils.training import ProteinClassificationTrainer
 from classification.training import get_paths
 from classification.utils import classification_training, ClassificationMetric, ClassificationDataset
 from classification.utils.training import FocalLossWithLabelSmoothing
+from classification.config import MAX_EXTENT_HALO
 
 #All data together
 TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
-TARGET_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth"
+TARGET_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/" #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth"
 
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
@@ -37,11 +38,10 @@ def get_normalization():
     )
 
 
-def train(testset=True, model_name= "protein_classification"):
-    in_channels=1
+def train(testset=True, model_name="protein_classification"):
+    in_channels = 1
     n_classes = 7
-    datasets = ["ExperimentRuns_faket_snr_0_12_0_2", "ExperimentRuns"]
-    #model_name = "protein_classification_czii_v11"
+    datasets = ["ExperimentRuns_faket_dens1_5_distr", "ExperimentRuns_basicNoise_dens1_5_distr"]
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -71,7 +71,7 @@ def train(testset=True, model_name= "protein_classification"):
     if found_values:
         max_extent = max(found_values)
 
-    halo=4 #TODO should I keep it at 4 or make it flexible and proportional to max_extent
+    halo = MAX_EXTENT_HALO
     print(f"Using bounding box size (with halo {halo}): {max_extent+halo}")
     patch_shape = (max_extent+halo, max_extent+halo, max_extent+halo)
     
@@ -95,7 +95,7 @@ def train(testset=True, model_name= "protein_classification"):
         lr=1e-4,
         logger=ClassificationLogger,
         trainer_class=ProteinClassificationTrainer,
-        n_iterations=100, #1.5e-3
+        n_iterations=8e3,
         out_channels=n_classes,
         in_channels=in_channels,
         loss=focal_loss, #torch.nn.CrossEntropyLoss(),#focal_loss,
@@ -117,7 +117,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v41"
+    model_name = "protein_classification_czii_v55"
     train(args.testset, model_name)
 
 

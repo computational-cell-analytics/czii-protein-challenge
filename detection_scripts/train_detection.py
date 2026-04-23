@@ -43,9 +43,9 @@ def find_zarr_or_mrc(base_path):
 
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr", save_max_extent=True):
 
-    datasets = ["ExperimentRuns"]
-    synthetic_dataset = ["ExperimentRuns"] #used to save the max_extent information for the classification later
-    model_name = "protein_detection_czii_v20"
+    datasets = ["ExperimentRuns_faket_dens1_5_distr"]
+    synthetic_dataset = ["ExperimentRuns_faket_dens1_5_distr"] #used to save the max_extent information for the classification later
+    model_name = "protein_detection_czii_v27"
 
     print(f"Training model {model_name}")
 
@@ -100,7 +100,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         patch_shape=patch_shape, batch_size=batch_size,
         check=check,
         lr=1e-4,
-        n_iterations=1e4,
+        n_iterations=5e3,
         out_channels=5,
         augmentations=None,
         eps=1e-5,

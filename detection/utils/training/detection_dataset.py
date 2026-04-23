@@ -5,6 +5,7 @@ from typing import List, Union, Tuple, Optional, Any, Callable
 import torch
 
 from torch_em.util import ensure_spatial_array, ensure_tensor_with_channels, ensure_patch_shape
+from torch_em.transform.raw import standardize
 from ..image import load_data
 
 
@@ -67,7 +68,7 @@ class DetectionDataset(torch.utils.data.Dataset):
                 f"Invalid patch_shape {patch_shape}, expected dimensions: {expected_ndim} or {expected_ndim + 1}"'''
 
         self.patch_shape = patch_shape
-        self.raw_transform = raw_transform
+        self.raw_transform = raw_transform if raw_transform is not None else standardize
         self.label_transform = label_transform
         self.label_transform2 = label_transform2
         self.transform = transform

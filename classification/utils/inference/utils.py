@@ -148,11 +148,11 @@ def match_preds_with_labels(preds, label_path, no_class_label="no_class"):
         matched_labels: list of GT labels (same length as matched_coords)
         num_unmatched_true: number of predictions that got no_class assigned
     """
-    # Load and parse JSONs, skipping albumin.json
+    # Load and parse JSONs, skipping albumin.json, actin.json, and mt.json
     json_files = [
         os.path.join(label_path, f)
         for f in os.listdir(label_path)
-        if f.endswith('.json') and f != "albumin.json" #need this for synthetic data
+        if f.endswith('.json') and f != "albumin.json" and f != "actin.json" and f != "mt.json"#need this for synthetic data
     ]
     from detection.data_processing.create_heatmap import parse_json_files
     label_coords, protein_types = parse_json_files(json_files)

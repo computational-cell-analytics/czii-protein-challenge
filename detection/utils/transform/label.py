@@ -137,7 +137,7 @@ class FlowTransform:
             os.path.join(root, f)
             for root, _, files in os.walk(label_path)
             for f in files
-            if f.endswith(".json") and f not in ("no_class.json", "albumin.json")
+            if f.endswith(".json") and f not in ("no_class.json", "albumin.json", "actin.json", "mt.json")
         ]
 
         coords, _ = parse_json_files(json_files)

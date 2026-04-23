@@ -112,9 +112,14 @@ def get_full_label_path(json_val_path, val_path):
     # Remove the prefix "split-" and the suffix ".json"
     experiment_name = file_name[len("split-"):-len(".json")]
 
-    label_path = os.path.join(LABEL_ROOT, experiment_name, val_path,"Picks")
+    base_label_path = os.path.join(LABEL_ROOT, experiment_name, val_path)
 
-    return label_path
+    # Check if "Picks" folder exists, use that path if it does
+    picks_path = os.path.join(base_label_path, "Picks")
+    if os.path.exists(picks_path) and os.path.isdir(picks_path):
+        return picks_path
+    else:
+        return base_label_path
 
 
 def gridsearch(json_val_path, model_path):
@@ -144,7 +149,7 @@ def gridsearch(json_val_path, model_path):
         json_files = [
             os.path.join(label_path, f)
             for f in os.listdir(label_path)
-            if f.endswith('.json') and f not in ('no_class.json', 'albumin.json')
+            if f.endswith('.json') and f not in ('no_class.json', 'albumin.json', "actin.json", "mt.json")
         ]
         label_coords, _ = parse_json_files(json_files)
 

@@ -6,6 +6,7 @@ import numpy as np
 import napari
 import zarr
 
+from classification.config import MAX_EXTENT_HALO
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -75,7 +76,7 @@ def estimate_gaussian_extent(heatmap, coord, threshold=0.1): #TODO might want to
     return max(extent)
 
 
-def extract_subtomograms(raw_data, peaks, size, halo=4, targets=None):
+def extract_subtomograms(raw_data, peaks, size, halo=MAX_EXTENT_HALO, targets=None):
     """Extract centered subtomograms from raw data with a defined size and halo.
     
     Args:

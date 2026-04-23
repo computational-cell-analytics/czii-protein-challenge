@@ -245,16 +245,17 @@ def get_coords_and_targets(paths: List[str], target_root: str) -> Tuple[List[Lis
 
     for path in paths:
         experiment_name = os.path.basename(path)
-        json_folder = os.path.join(target_root, experiment_name)
-        picks_folder = os.path.join(json_folder, "Picks")
-
-        # Load and parse JSONs, skipping albumin.json
-        json_files = [
-            os.path.join(picks_folder, f)
-            for f in os.listdir(picks_folder)
-            if f.endswith('.json') and f != "albumin.json" #need this for synthetic data
-        ]
+        parent_folder = os.path.basename(os.path.dirname(path))
+        json_folder = os.path.join(target_root, parent_folder, experiment_name)
+        print(f"json_folder {json_folder}")
         
+        json_files = [
+            os.path.join(root, f)
+            for root, _, files in os.walk(json_folder)
+            for f in files
+            if f.endswith(".json") and f not in ("albumin.json") and f not in ("actin.json") and f not in ("mt.json")
+        ]
+        print(f"json_files {json_files}")
         coords, protein_types = parse_json_files(json_files)
 
         # Convert to integers for array slicing
