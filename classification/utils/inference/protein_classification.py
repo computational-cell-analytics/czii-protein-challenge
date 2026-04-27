@@ -8,8 +8,8 @@ import numpy as np
 import torch_em
 from torch_em.model.resnet3d import resnet3d_18
 import torch.nn as nn
-from torch_em.transform.raw import normalize
 from classification.utils.training import CryoETNormalize
+
 
 def pad_to_patch(subtomograms: np.ndarray, patch_shape=(64, 64, 64)):
     """
@@ -73,10 +73,12 @@ def get_model(model_path, device, EfficientNet=False):
     model.eval()
     model.to(device)
 
-    return model
+    return model, checkpoint
+
 
 def protein_classification(
     subtomograms: np.ndarray,  # [z, y, x] or (N, z, y, x)
+    model: torch.nn.Module = None,
     model_path: str = None,
     verbose: bool = True,
     device: str = None,
@@ -87,6 +89,7 @@ def protein_classification(
     
     Args:
         subtomograms (np.ndarray): shape (N, D, H, W) or (D, H, W) for a single cube
+        model (torch.nn.Module, optional): Preloaded model. If given, model_path is ignored.
         model_path (str): path to model file or directory
         verbose (bool): Whether to print timing information
         device (str or torch.device): 'cpu' or 'cuda' or torch.device object, defaults to available device
@@ -98,9 +101,6 @@ def protein_classification(
     if verbose:
         print("Predicting protein location in volume of shape", subtomograms.shape)
 
-    if model_path.endswith("best.pt"):
-        model_path = os.path.split(model_path)[0]
-
     if subtomograms.ndim == 3:  # single cube
         subtomograms = np.expand_dims(subtomograms, axis=0)
 
@@ -109,6 +109,7 @@ def protein_classification(
         #subtomograms = pad_to_patch(subtomograms)
 
     #normalise
+    #from torch_em.transform.raw import normalize
     #subtomograms = np.stack([normalize(st) for st in subtomograms])
     normalizer = CryoETNormalize()
     subtomograms = torch.stack(
@@ -123,18 +124,23 @@ def protein_classification(
     elif isinstance(device, str):
         device = torch.device(device)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    if model is None:
+        if model_path is None:
+            raise ValueError("Either 'model' or 'model_path' must be provided.")
 
-        if os.path.isdir(model_path):  # Load model from torch_em checkpoint dir
-            #model = torch_em.util.load_model(checkpoint=model_path, device=device)
-            model = get_model(model_path=model_path, device=device, EfficientNet=EfficientNet)
-        else:  # Load model directly from serialized pytorch model
-            #model = torch.load(model_path, map_location=device)
-            #TODO!
-            print("not implemented yet!")
+        if model_path.endswith("best.pt"):
+            model_path = os.path.split(model_path)[0]
 
-    #model.eval()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model, _ = get_model(
+                model_path=model_path,
+                device=device,
+                EfficientNet=EfficientNet
+            )
+    else:
+        model = model.to(device)
+        model.eval()
 
     with torch.no_grad():
         tensor = torch.from_numpy(subtomograms).float().unsqueeze(1).to(device)  # (N, 1, D, H, W)

@@ -1,13 +1,15 @@
 import os
-# from glob import glob
 import argparse
+import json
 
-from detection.utils import get_paths  # noqa
-from detection.utils import supervised_training  # noqa
+from detection.utils import get_paths  
+from detection.utils import supervised_training 
+from detection.data_processing import save_max_extent_to_json
 
-TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/raw" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
-LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/data/labels" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/public_test_dataset/ground_truth_scaled_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
-OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training" #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/training" #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
+TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
+LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/"
+OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
+
 
 def find_zarr_or_mrc(base_path):
     zarr_folders = []
@@ -39,11 +41,14 @@ def find_zarr_or_mrc(base_path):
     # Return the first .mrc found
     return mrc_files[0]
 
-    
-def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr"):
 
-    datasets = ["ExperimentRuns_faket_snr_0_12_0_2", "ExperimentRuns"]
-    model_name = "protein_detection_czii_v18"
+def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr", save_max_extent=True):
+
+    datasets = ["ExperimentRuns_faket_dens0_25_distr"]
+    synthetic_dataset = ["ExperimentRuns_faket_dens0_25_distr"] #used to save the max_extent information for the classification later
+    model_name = "protein_detection_czii_v31"
+
+    print(f"Training model {model_name}")
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
@@ -74,7 +79,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     batch_size = 2
     check = False
 
-    #add the zarr file path ending to each path
+    # add the zarr file path ending to each path
     train_paths = [find_zarr_or_mrc(path) for path in train_paths]
     val_paths = [find_zarr_or_mrc(path) for path in val_paths]
     test_paths = [find_zarr_or_mrc(path) for path in test_paths]
@@ -82,19 +87,21 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     print(f"train_paths {train_paths}")
     print(f"val_paths{val_paths}")
     print(f"test_paths {test_paths}")
-    
-    # TODO do we want n_samples_train and n_samples_val in the supervised training?
+
+    if save_max_extent:
+        save_max_extent_to_json(TRAIN_ROOT, synthetic_dataset)
+        
     supervised_training(
         name=model_name,
         train_paths=train_paths,
         train_label_paths=train_label_paths,
         val_paths=val_paths,
         val_label_paths=val_label_paths,
-        raw_key = "0",
+        raw_key="0",
         patch_shape=patch_shape, batch_size=batch_size,
         check=check,
         lr=1e-4,
-        n_iterations=1e4,
+        n_iterations=5e3,
         out_channels=5,
         augmentations=None,
         eps=1e-5,
@@ -103,13 +110,17 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         upper_bound=None,
         test_paths=test_paths,
         test_label_paths=test_label_paths,
-        save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models", #"/mnt/vast-nhr/home/muth9/u12095/cryo-et/czii_challenge/models", #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
+        save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
+        num_workers=8, #TODO maybe can go bigger here
     )
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
+    parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created. " \
+                        "Only set to False if --no_max_extent is also set to False.")
+    parser.add_argument("-me", "--save_max_extent", action='store_false', 
+                        help="Set to False if no max extent (needed for classification) should not be saved automatically.")
     args = parser.parse_args()
     train(args.testset)
 

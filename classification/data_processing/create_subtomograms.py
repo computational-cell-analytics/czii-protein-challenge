@@ -6,6 +6,7 @@ import numpy as np
 import napari
 import zarr
 
+from classification.config import MAX_EXTENT_HALO
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -35,13 +36,13 @@ def load_heatmap(npy_filepath):
     return heatmap
 
 
-
 def load_peaks(json_filepath):
     """Load list of 3D peak coordinates from JSON file and scale them down by 10."""
     with open(json_filepath, 'r') as f:
         peaks = json.load(f)
     # Divide each coordinate by 10
     return [tuple(coord / 10 for coord in peak) for peak in peaks]
+
 
 def estimate_gaussian_extent(heatmap, coord, threshold=0.1): #TODO might want to lower threshold?
     """
@@ -75,7 +76,7 @@ def estimate_gaussian_extent(heatmap, coord, threshold=0.1): #TODO might want to
     return max(extent)
 
 
-def extract_subtomograms(raw_data, peaks, size, halo=4, targets=None):
+def extract_subtomograms(raw_data, peaks, size, halo=MAX_EXTENT_HALO, targets=None):
     """Extract centered subtomograms from raw data with a defined size and halo.
     
     Args:
@@ -95,6 +96,7 @@ def extract_subtomograms(raw_data, peaks, size, halo=4, targets=None):
         bbox_size += 1  # Ensure odd size for symmetric centering
 
     half_size = bbox_size // 2
+    #print(f"using halo of {halo}")
     #print(f"Using bounding box size (with halo): {bbox_size}")
 
     subtomograms = []
@@ -141,6 +143,7 @@ def visualize_with_napari(raw_data, heatmap, peaks, subtomograms):
 
     #napari.run()
 
+
 def get_max_extent(peaks, heatmap):
     """get max dimensions for the bb that includes all proteins. Makes sure the max extent is not an outlier. """
 
@@ -166,6 +169,7 @@ def get_max_extent(peaks, heatmap):
         max_extent = int(np.max(filtered_extents))
     
     return max_extent
+
 
 def main():
     args = parse_arguments()

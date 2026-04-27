@@ -11,33 +11,63 @@ from ..training.tiling_helper import parse_tiling
 from detection.data_processing.create_heatmap import parse_json_files
 import numpy as np
 
+from detection.config import ADJ_FACTOR, CZII_SMALLEST_PROTEIN_SIZE
+
 #TODO Do I want to make this more flexible??
-TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/static/"
-LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/" #"/scratch-grete/projects/nim00007/cryo-et/challenge-data/train/overlay/"
+TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
+LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/"
 DEFAULT_JSON = "/mnt/lustre-emmy-hdd/usr/u12095/cryo-et/czii_challenge/training/protein_detection_czii_v4/split-ExperimentRuns.json"
 
 
 def get_non_zarr(input_path):
-    #TODO expand for other file types
+    """
+    Load a single volumetric file from a directory.
+    Supports .mrc, .h5, .npy, .tif/.tiff.
+    """
 
-    import mrcfile
-
-    # Look for .mrc files in the directory
-    mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
+    files = os.listdir(input_path)
     
-    if not mrc_files:
-        raise FileNotFoundError(f"No .mrc file found in {input_path}")
-    if len(mrc_files) > 1:
-        raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
+    #Supported extensions
+    supported_exts = ['.mrc', '.h5', '.npy', '.tif', '.tiff']
     
-    # Get the single .mrc file
-    mrc_path = os.path.join(input_path, mrc_files[0])
+    # Find files with supported extensions
+    valid_files = [f for f in files if os.path.splitext(f)[1].lower() in supported_exts]
+    
+    if not valid_files:
+        raise FileNotFoundError(f"No supported files found in {input_path}. Supported extensions: {supported_exts}")
 
-    # Open MRC file
-    with mrcfile.open(mrc_path, permissive=True) as mrc:
-        input_volume = mrc.data  
+    file_path = os.path.join(input_path, valid_files[0])
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    # Load depending on file type
+    if ext == '.mrc':
+        import mrcfile
+        with mrcfile.open(file_path, permissive=True) as mrc:
+            volume = mrc.data
+    elif ext in ['.tif', '.tiff']:
+        from tifffile import imread
+        volume = imread(file_path)
+    elif ext == '.npy':
+        volume = np.load(file_path)
+    elif ext == '.h5':
+        from elf.io import open_file
+        with open_file(input_path, "r") as f:
 
-    return input_volume
+            # Try to automatically derive the key with the raw data.
+            keys = list(f.keys())
+            if len(keys) == 1:
+                key = keys[0]
+            elif "data" in keys:
+                key = "data"
+            elif "raw" in keys:
+                key = "raw"
+
+            volume = f[key][:]
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
+    
+    return volume
+
 
 def get_volume(input_path: str) -> np.ndarray:
     # Recursive search for .zarr folders
@@ -75,15 +105,22 @@ def get_full_image_path(json_val_path, val_path):
     image_path = os.path.join(TRAIN_ROOT, experiment_name,val_path)
 
     return image_path
-    
+
+
 def get_full_label_path(json_val_path, val_path):
     file_name = os.path.basename(json_val_path)
     # Remove the prefix "split-" and the suffix ".json"
     experiment_name = file_name[len("split-"):-len(".json")]
 
-    label_path = os.path.join(LABEL_ROOT, experiment_name, val_path,"Picks")
+    base_label_path = os.path.join(LABEL_ROOT, experiment_name, val_path)
 
-    return label_path
+    # Check if "Picks" folder exists, use that path if it does
+    picks_path = os.path.join(base_label_path, "Picks")
+    if os.path.exists(picks_path) and os.path.isdir(picks_path):
+        return picks_path
+    else:
+        return base_label_path
+
 
 def gridsearch(json_val_path, model_path):
     print("starting grid search")
@@ -109,48 +146,28 @@ def gridsearch(json_val_path, model_path):
         input_volume = get_volume(image_path)
         pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model_path=model_path, verbose=True)[0]
 
-        
-        #json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
         json_files = [
             os.path.join(label_path, f)
             for f in os.listdir(label_path)
-            if f.endswith('.json') and f not in ('no_class.json', 'albumin.json')
+            if f.endswith('.json') and f not in ('no_class.json', 'albumin.json', "actin.json", "mt.json")
         ]
         label_coords, _ = parse_json_files(json_files)
 
-
-
         for thresh in tqdm(threshes):
 
-            #smalles protein structure: "beta-amylase": 33.27
-            #bigges protein structure: "ribosome": 109.02,
-            #0.3 is the factor to match the PDB size to the experimental data size
-            adj_factor=0.3 #TODO implement this as an argument, also when creating heatmap
+            adj_factor = ADJ_FACTOR
 
-            #TODO decide on blob_log or peak_local_max; blob_log is SUPER slow
-            '''# Start timing
-            start_time = time.time()
-
-            pred_coords_sigma = blob_log(pred, min_sigma=33.27*adj_factor *0.9, max_sigma=109.02*adj_factor*1.1, threshold=thresh) 
-            pred_coords = pred_coords_sigma[:, :-1]  # This removes the last column (sigma)
-
-            # Stop timing
-            elapsed_time = time.time() - start_time
-            print(f"blob_log took {elapsed_time:.4f} seconds")
-            '''
-            pred_coords = peak_local_max(pred, min_distance=int(33.27*adj_factor *0.9), threshold_abs=thresh)
+            pred_coords = peak_local_max(pred, min_distance=int(CZII_SMALLEST_PROTEIN_SIZE*adj_factor * 0.9), threshold_abs=thresh)
             _, _, f1, _, _, _ = metric_coords(label_coords, pred_coords) 
 
             data.append([f1, thresh])
             print(f"f1 and corresponding thresholds: {data}")
 
         #Alternative using list conprehension
-        '''#smalles protein structure: "beta-amylase": 33.27
-        #bigges protein structure: "ribosome": 109.02,
-        #0.3 is the factor to match the PDB size to the experimental data size
-        adj_factor=0.3 #TODO implement this as an argument, also when creating heatmap      
+        '''
+        adj_factor = ADJ_FACTOR     
         data.extend([
-        [metric_coords(label_coords, blob_log(pred, min_sigma=33.27 * adj_factor * 0.9, 
+        [metric_coords(label_coords, blob_log(pred, min_sigma=CZII_SMALLEST_PROTEIN_SIZE * adj_factor * 0.9, 
                                             max_sigma=109.02 * adj_factor * 1.1, 
                                             threshold=thresh))[2], thresh]
         for thresh in tqdm(threshes)

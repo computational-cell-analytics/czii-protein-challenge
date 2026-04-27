@@ -1,18 +1,16 @@
-import warnings
-from functools import partial
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
-from numpy.typing import ArrayLike
 import sklearn.metrics as metrics
 import torch
 import torch_em
 
 from torch_em.classification.classification_logger import ClassificationLogger
-from torch_em.classification.classification_trainer import ClassificationTrainer
+from .trainer import ProteinClassificationTrainer
 
 from .data_loader import create_data_loader
 from .classification_dataset import ClassificationDataset
+from .trainer import default_classification_trainer
 
 from torch_em.model.resnet3d import resnet3d_18
 import torch.nn as nn
@@ -68,21 +66,21 @@ def classification_training(
     train_paths: List[str],
     val_paths: List[str],
     test_paths: List[str],
-    max_extent:int,
+    max_extent: int,
     target_root: str,
     patch_shape: Tuple[int, int, int],
     batch_size: int = 1,
     lr: float = 1e-4,
     logger=ClassificationLogger,
-    trainer_class=ClassificationTrainer,
+    trainer_class=ProteinClassificationTrainer,
     n_iterations: int = int(1e5),
     check: bool = False,
     out_channels: int = 2,
     in_channels: int = 1,
     loss: Optional[torch.nn.Module] = None,
     metric: Optional[ClassificationMetric] = None,
-    augmentations: Optional[Callable] = None,  # TODO: Replace with real augmentation pipeline
-    normalization: Optional[Callable] = None,  # TODO: Replace with real normalization
+    augmentations: Optional[Callable] = None,
+    normalization: Optional[Callable] = None,
     save_root: Optional[str] = None,
     n_samples_train: Optional[int] = None,
     n_samples_val: Optional[int] = None,
@@ -115,10 +113,8 @@ def classification_training(
         kwargs: Additional args for trainer.
     """
     
+    num_workers = kwargs.pop("num_workers", 4 * batch_size)
 
-    num_workers = 6  #TODO using this in location training as well, check if it should be different
-
-    #TODO actually get the test_loader and store the data from it as subtomograms somewhere, is this possible?
     train_loader, val_loader, test_loader, idx_to_label = create_data_loader(
         train_data=train_paths,
         val_data=val_paths,
@@ -144,7 +140,7 @@ def classification_training(
         check_loader(val_loader, n_samples=4)
         return
 
-    model = get_3d_model(EfficientNet=False,in_channels=in_channels, out_channels=out_channels)
+    model = get_3d_model(EfficientNet=False, in_channels=in_channels, out_channels=out_channels)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -154,7 +150,7 @@ def classification_training(
     loss = torch.nn.CrossEntropyLoss() if loss is None else loss
     metric = ClassificationMetric() if metric is None else metric
 
-    trainer = torch_em.default_segmentation_trainer(
+    trainer = default_classification_trainer(
         name=name,
         model=model,
         train_loader=train_loader,
@@ -168,10 +164,11 @@ def classification_training(
         metric=metric,
         logger=logger,
         trainer_class=trainer_class,
+        patch_shape=patch_shape,
+        idx_to_label=idx_to_label,
         **kwargs,
     )
-
+    
     trainer.fit(n_iterations)
 
     return idx_to_label
-

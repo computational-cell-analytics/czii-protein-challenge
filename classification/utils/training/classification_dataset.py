@@ -11,6 +11,7 @@ import os
 import h5py
 from torch.utils.data import get_worker_info
 
+
 class ClassificationDataset(torch.utils.data.Dataset):
     """
     Dataset for classification training using lazy subtomogram extraction.
@@ -73,7 +74,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
         print(f"Initialized dataset with {len(self.targets)} subtomograms from {len(paths)} tomograms")
 
     def __len__(self):
-        return len(self.targets)
+        return len(self.coords)
 
     def __getitem__(self, index):
         path = self.paths[index]
@@ -136,16 +137,12 @@ class ClassificationDataset(torch.utils.data.Dataset):
 
                     self._debug_save_count += 1'''
 
-
-        
-
         if isinstance(y, str):
             y = self.label_to_index[y]
         if not isinstance(y, torch.Tensor):
             y = torch.tensor(y, dtype=torch.long)
 
         return x, y
-
 
 
     def _resize(self, x):
@@ -162,7 +159,6 @@ class ClassificationDataset(torch.utils.data.Dataset):
             mode="trilinear", align_corners=False
         )
         return x_resized.squeeze(0)
-
 
     @property
     def ndim(self):

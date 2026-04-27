@@ -9,6 +9,7 @@ import json
 from detection.utils import metric_coords
 from detection.data_processing.create_heatmap import parse_json_files
 
+
 def update_csv(csv_file, new_rows):
     """Merge or update results in the evaluation CSV."""
     fieldnames = [
@@ -161,7 +162,7 @@ def main():
 
     args = parser.parse_args()
 
-    file_ending = "_protein_detections"#_peak_local_max"
+    file_ending = "_protein_detections"
 
     if os.path.isfile(args.pred_coords) and args.pred_coords.endswith(".json"):
         # Extract input_name from the filename
@@ -173,6 +174,7 @@ def main():
         print("Invalid input")
 
     print("Finished evaluating!")
+
 
 if __name__ == "__main__":
     main()

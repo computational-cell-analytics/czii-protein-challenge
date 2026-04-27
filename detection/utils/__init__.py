@@ -1,9 +1,10 @@
 from .training.data_loader import create_data_loader
 from .training.dataset_splits import get_paths
-from .training.heatmap_dataset import HeatmapDataset
+from .training.detection_dataset import DetectionDataset
 from .training.training import supervised_training
 from .prediction.prediction import get_prediction_torch_em
 from .inference.protein_detection import protein_detection
 from .training.tiling_helper import parse_tiling
 from .evaluation.evaluation_metrics import metric_coords
 from .image import load_data
+from .transform import HeatmapTransform, FlowTransform, HeatmapFlowTransform

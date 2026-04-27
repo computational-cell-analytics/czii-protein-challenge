@@ -12,7 +12,7 @@ from scipy.optimize import linear_sum_assignment
 
 from detection.utils import metric_coords
 
-# ----------------- PARSE JSON -----------------
+
 def parse_json_files(json_files):
     coordinates = []
     protein_types = []
@@ -30,7 +30,7 @@ def parse_json_files(json_files):
 
     return np.array(coordinates), protein_types
 
-# ----------------- MATCH PRED ↔ GT -----------------
+
 def match_predictions_to_labels(preds, gts, match_distance=45.0):
     n, m = len(gts), len(preds)
     if n == 0 or m == 0:
@@ -47,7 +47,8 @@ def match_predictions_to_labels(preds, gts, match_distance=45.0):
 
     return matched_pred_idx, matched_gt_idx
 
-# ----------------- CLASSIFICATION EVALUATION -----------------
+
+#Classification
 def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label):
     cm = confusion_matrix(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     plt.figure(figsize=(8, 6))
@@ -89,7 +90,8 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     with open(os.path.join(output_path, f"classification_report_{name}.txt"), "w") as f:
         f.write(report)
 
-# ----------------- DETECTION EVALUATION -----------------
+
+# Detection
 def evaluate_per_protein_type(pred_coords, label_path, model_name, input_name):
     json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
     label_coords, protein_types = parse_json_files(json_files)
@@ -145,7 +147,7 @@ def evaluate_detection(pred_coords, label_path, model_name, input_name, evaluate
     if evaluate_per_protein:
         evaluate_per_protein_type(predictions, label_path, model_name, input_name)
 
-# ----------------- MAIN EVALUATION -----------------
+
 def evaluate_dataset(ground_truth_dir, predictions_dir, output_dir, match_distance=45.0):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -166,10 +168,8 @@ def evaluate_dataset(ground_truth_dir, predictions_dir, output_dir, match_distan
         gt_coords, gt_labels = parse_json_files(gt_jsons)
         pred_coords, pred_labels = parse_json_files(pred_jsons)
 
-        # --- DETECTION EVALUATION (coordinate-only) ---
         evaluate_detection(pred_coords, gt_tomo_path, model_name="1_Daddies", input_name=tomo_id)
 
-        # --- CLASSIFICATION EVALUATION ---
         matched_pred_idx, matched_gt_idx = match_predictions_to_labels(pred_coords, gt_coords, match_distance=match_distance)
 
         # matched pairs
@@ -184,7 +184,6 @@ def evaluate_dataset(ground_truth_dir, predictions_dir, output_dir, match_distan
 
     # Run classification evaluation only on matched points
     run_full_evaluation(all_sample_ids, all_truth_labels, all_pred_labels, all_probs, output_dir, name="public_test_dataset", idx_to_label=idx_to_label)
-
 
 
 if __name__ == "__main__":

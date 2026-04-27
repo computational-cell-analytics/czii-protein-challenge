@@ -7,6 +7,7 @@ import time
 import os
 import zarr
 
+
 def get_non_zarr(input_path):
     """Load .mrc tomogram from a folder containing exactly one .mrc file."""
     mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
@@ -20,6 +21,7 @@ def get_non_zarr(input_path):
     with mrcfile.open(mrc_path, permissive=True) as mrc:
         input_volume = mrc.data.astype(np.float32)
     return input_volume
+
 
 def get_volume(input_path: str, zarr_: bool = False) -> np.ndarray:
     """Load a tomogram from either .zarr or .mrc format."""
@@ -49,8 +51,6 @@ def get_volume(input_path: str, zarr_: bool = False) -> np.ndarray:
     return volume
 
 
-
-
 def load_no_class_coords(json_path):
     """Load coordinates from no_class.json."""
     with open(json_path, 'r') as f:
@@ -61,6 +61,7 @@ def load_no_class_coords(json_path):
         if all(k in loc for k in ["x", "y", "z"]):
             coords.append((loc["z"], loc["y"], loc["x"]))  # z,y,x order
     return np.array(coords)
+
 
 def extract_crop(volume, center, crop_size=43):
     """Extract a 3D crop centered at 'center' from the tomogram."""
@@ -84,6 +85,7 @@ def extract_crop(volume, center, crop_size=43):
 
     crop = vol_padded[zmin_p:zmax_p, ymin_p:ymax_p, xmin_p:xmax_p]
     return crop
+
 
 def visualize_crops_sequential(tomogram_path, no_class_json, crop_size=43, n_crops=None, zarr_=False):
     """Open each crop in Napari sequentially, one after another."""
@@ -123,8 +125,9 @@ def visualize_crops_sequential(tomogram_path, no_class_json, crop_size=43, n_cro
 
     print("All crops visualized.")
 
+
 if __name__ == "__main__":
-    # --- MODIFY THESE PATHS ---
+    
     tomogram_path = Path("/mnt/vast-nhr/home/muth9/u12095/test_crop/TS_69_2")
     no_class_json = Path("/mnt/vast-nhr/home/muth9/u12095/test_crop/no_class.json")
 

@@ -3,9 +3,6 @@ from glob import glob
 import json
 from sklearn.model_selection import train_test_split
 
-TRAIN_ROOT = ""
-OUTPUT_ROOT = ""
-
 
 def _require_train_val_test_split(datasets, train_root, output_root, extension):
     train_ratio, val_ratio, test_ratio = 0.8, 0.1, 0.1
@@ -23,8 +20,11 @@ def _require_train_val_test_split(datasets, train_root, output_root, extension):
             continue
 
         ds_path = os.path.join(train_root, ds)
-        # need to check if the dataset contains files or folders (like eg for zarr)
-        if any(os.path.isfile(os.path.join(ds_path, f)) for f in os.listdir(ds_path)):
+        # need to check if the dataset contains files or folders (like eg for zarr) and ignore json files
+        if any(
+            os.path.isfile(os.path.join(ds_path, f)) and not f.endswith(".json")
+            for f in os.listdir(ds_path)
+        ):
             # If the dataset contains files
             file_paths = sorted(glob(os.path.join(ds_path, f"*.{extension}")))
             file_names = [os.path.basename(path) for path in file_paths]
@@ -39,7 +39,7 @@ def _require_train_val_test_split(datasets, train_root, output_root, extension):
 
 
 def _require_train_val_split(datasets, train_root, output_root, extension):
-    train_ratio, val_ratio = 0.8, 0.2  # noqa
+    train_ratio, val_ratio = 0.8, 0.2
 
     def _train_val_split(names):
         train, val = train_test_split(names, test_size=1 - train_ratio, shuffle=True)

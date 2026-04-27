@@ -1,7 +1,7 @@
 channels:
     - conda-forge
 name:
-    protein_finder
+    pro-revelio
 dependencies:
     - bioimageio.core
     - kornia

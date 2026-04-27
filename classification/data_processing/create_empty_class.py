@@ -7,13 +7,11 @@ from pathlib import Path
 from scipy.spatial import cKDTree
 import zarr
 
-# =====================================================
-# Volume loading utilities
-# =====================================================
 
 def get_non_zarr(input_path):
     """Load .mrc tomogram from a folder containing exactly one .mrc file."""
     mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
+    print(f"mrc_files {mrc_files}")
     
     if not mrc_files:
         raise FileNotFoundError(f"No .mrc file found in {input_path}")
@@ -21,9 +19,11 @@ def get_non_zarr(input_path):
         raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
     
     mrc_path = os.path.join(input_path, mrc_files[0])
+    print(f"mrc_path {mrc_path}")
     with mrcfile.open(mrc_path, permissive=True) as mrc:
         input_volume = mrc.data.astype(np.float32)
     return input_volume
+
 
 def get_volume(input_path: str, zarr_: bool = False) -> np.ndarray:
     """Load a tomogram from either .zarr or .mrc format."""
@@ -52,9 +52,6 @@ def get_volume(input_path: str, zarr_: bool = False) -> np.ndarray:
         volume = get_non_zarr(input_path)
     return volume
 
-# =====================================================
-# Coordinate generation logic
-# =====================================================
 
 def parse_json_files(json_files):
     """Parse multiple JSON files to extract coordinates."""
@@ -70,6 +67,7 @@ def parse_json_files(json_files):
                     coordinates.append((z / 10, y / 10, x / 10))
     return np.array(coordinates)
 
+
 def generate_no_class_points(shape, existing_coords, min_distance=55, n_points=50):
     """
     Generate random points within tomogram volume that are:
@@ -80,7 +78,7 @@ def generate_no_class_points(shape, existing_coords, min_distance=55, n_points=5
     existing_tree = cKDTree(existing_coords) if len(existing_coords) > 0 else None
     new_points = []
     tries = 0
-    max_tries = 200000
+    max_tries = 10000000
 
     while len(new_points) < n_points and tries < max_tries:
         tries += 1
@@ -114,6 +112,7 @@ def generate_no_class_points(shape, existing_coords, min_distance=55, n_points=5
 
     return np.array(new_points)
 
+
 def create_no_class_json(input_dir, picks_dir, zarr_=False, n_points=50):
     """Create (or overwrite) no_class.json for a single tomogram folder."""
     # Load tomogram volume (supports mrc or zarr)
@@ -121,14 +120,14 @@ def create_no_class_json(input_dir, picks_dir, zarr_=False, n_points=50):
     shape = volume.shape  # (z, y, x)
 
     # Collect all JSON files except no_class
-    json_files = [str(p) for p in Path(picks_dir).glob("*.json") if not p.name.startswith("no_class")]
-    existing_coords = parse_json_files(json_files)  # Å → nm
+    json_files = [str(p) for p in Path(picks_dir).glob("*.json") if not p.name.startswith("no_class") and not p.name.startswith("actin") and not p.name.startswith("mt")]
+    existing_coords = parse_json_files(json_files)  # Angstrom to nm
 
     # Generate new points in nm
     no_class_points = generate_no_class_points(
         shape,
         existing_coords,
-        min_distance=55,
+        min_distance=40,
         n_points=n_points
     )
 
@@ -143,7 +142,7 @@ def create_no_class_json(input_dir, picks_dir, zarr_=False, n_points=50):
         "points": []
     }
 
-    #Convert nm → Å before saving
+    #Convert nm to angstrom before saving
     for i, (z_nm, y_nm, x_nm) in enumerate(no_class_points):
         data["points"].append({
             "location": {
@@ -167,16 +166,17 @@ def process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=50):
     """Iterate through all tomograms and regenerate no_class.json files."""
     for tomo_dir in Path(tomo_root).iterdir():
         if tomo_dir.is_dir():
-            picks_dir = Path(gt_root) / tomo_dir.name / "Picks"
+            picks_dir = Path(gt_root) / tomo_dir.name #/ "Picks"
             if not picks_dir.exists():
                 continue
 
             print(f"\n Processing {tomo_dir.name}")
             create_no_class_json(tomo_dir, picks_dir, zarr_=zarr_, n_points=n_points)
 
+
 if __name__ == "__main__":
-    tomo_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/tomograms"
-    gt_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/"
+    tomo_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/ExperimentRuns_basicNoise_dens1_5_distr"
+    gt_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/ExperimentRuns_basicNoise_dens1_5_distr"
 
     # Set zarr_=True if your data is in .zarr format
-    process_all_tomograms(tomo_root, gt_root, zarr_=True, n_points=25)
+    process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=25)

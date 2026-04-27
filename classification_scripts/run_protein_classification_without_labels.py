@@ -5,16 +5,16 @@ import h5py
 import zarr
 from tqdm import tqdm
 import numpy as np
-import json
 
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
-from classification.training import load_heatmap, load_peaks
+from classification.training import load_peaks
 from classification.data_processing import extract_subtomograms
 from classification.utils import protein_classification
 
+#TODO update this script if needed
 
 def get_volume(input_path: str) -> np.ndarray:
     zarr_file = zarr.open(os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"), mode='r')
@@ -49,7 +49,7 @@ def run_protein_classification(input_paths, output_path: str, model_path: str, b
             sample_ids.append(os.path.basename(path))
         cubes = np.stack(cubes, axis=0)
 
-        # Run classification — now only returns probabilities & predictions
+        # Run classification, returns probabilities and predictions
         probs, preds = protein_classification(cubes, model_path)
 
         all_sample_ids.extend(sample_ids)

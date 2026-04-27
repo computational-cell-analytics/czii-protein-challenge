@@ -3,7 +3,8 @@
 /logs/
 assisting_files/
 __pycache__/
-detection/evaluation/results/
+detection_scripts/evaluation/results/
+classificationscripts/evaluation/results/
 _debug_augmented_examples/
 
 # Ignore all .log files

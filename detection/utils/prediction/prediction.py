@@ -1,14 +1,14 @@
 import os
 import time
 import warnings
-# from glob import glob
-from typing import Dict  # , Optional, Tuple
+from typing import Dict
 
 import numpy as np
 import torch
 import torch_em
 
 from torch_em.util.prediction import predict_with_halo
+from torch_em.transform.raw import standardize
 
 
 def get_prediction_torch_em(
@@ -57,7 +57,7 @@ def get_prediction_torch_em(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
 
-        if os.path.isdir(model_path):  # Load the model from a torch_em checkpoint.
+        if os.path.isdir(model_path):  # Load the model from torch_em checkpoint
             import sys
             import detection.utils as det_utils
 
@@ -73,7 +73,7 @@ def get_prediction_torch_em(
         pred = predict_with_halo(
             input_volume, model, gpu_ids=[device],
             block_shape=block_shape, halo=halo,
-            preprocess=None,
+            preprocess=standardize,
         )
     if verbose:
         print("Prediction time in", time.time() - t0, "s")
