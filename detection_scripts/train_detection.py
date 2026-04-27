@@ -41,11 +41,12 @@ def find_zarr_or_mrc(base_path):
     # Return the first .mrc found
     return mrc_files[0]
 
+
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr", save_max_extent=True):
 
-    datasets = ["ExperimentRuns_faket_dens1_5_distr"]
-    synthetic_dataset = ["ExperimentRuns_faket_dens1_5_distr"] #used to save the max_extent information for the classification later
-    model_name = "protein_detection_czii_v27"
+    datasets = ["ExperimentRuns_faket_dens0_25_distr"]
+    synthetic_dataset = ["ExperimentRuns_faket_dens0_25_distr"] #used to save the max_extent information for the classification later
+    model_name = "protein_detection_czii_v31"
 
     print(f"Training model {model_name}")
 
@@ -78,7 +79,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     batch_size = 2
     check = False
 
-    #add the zarr file path ending to each path
+    # add the zarr file path ending to each path
     train_paths = [find_zarr_or_mrc(path) for path in train_paths]
     val_paths = [find_zarr_or_mrc(path) for path in val_paths]
     test_paths = [find_zarr_or_mrc(path) for path in test_paths]
