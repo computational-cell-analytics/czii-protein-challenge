@@ -6,7 +6,7 @@ import mrcfile
 from pathlib import Path
 from scipy.spatial import cKDTree
 import zarr
-
+from scipy.ndimage import distance_transform_edt
 
 def get_non_zarr(input_path):
     """Load .mrc tomogram from a folder containing exactly one .mrc file."""
@@ -113,6 +113,85 @@ def generate_no_class_points(shape, existing_coords, min_distance=55, n_points=5
     return np.array(new_points)
 
 
+def generate_no_class_points_from_distance_map(
+    shape,
+    existing_coords,
+    min_distance=50,
+    n_points=50,
+    enforce_spacing=True
+):
+    """
+    Generate points using a distance transform:
+    - Points are sampled where distance to nearest protein ≥ min_distance
+    - Optionally enforce spacing between sampled points
+    """
+
+    # Create empty volume
+    volume = np.ones(shape, dtype=np.uint8)
+
+    # Mark protein coordinates as 0
+    coords_int = np.round(existing_coords).astype(int)
+
+    # Clip to valid indices
+    coords_int[:, 0] = np.clip(coords_int[:, 0], 0, shape[0]-1)
+    coords_int[:, 1] = np.clip(coords_int[:, 1], 0, shape[1]-1)
+    coords_int[:, 2] = np.clip(coords_int[:, 2], 0, shape[2]-1)
+
+    volume[coords_int[:, 0], coords_int[:, 1], coords_int[:, 2]] = 0
+
+    # Compute distance transform
+    distance_map = distance_transform_edt(volume).astype(np.float32)
+
+    # Get valid candidate voxels 
+    valid_mask = distance_map >= min_distance
+
+    #remove edges #TODO maybe remove this? I do padding in training anyways, no?
+    valid_mask[:min_distance, :, :] = False
+    valid_mask[-min_distance:, :, :] = False
+    valid_mask[:, :min_distance, :] = False
+    valid_mask[:, -min_distance:, :] = False
+    valid_mask[:, :, :min_distance] = False
+    valid_mask[:, :, -min_distance:] = False
+    candidates = np.argwhere(valid_mask)
+
+    print(f"Found {len(candidates)} valid candidate voxels")
+
+    if len(candidates) == 0:
+        raise RuntimeError("No valid positions found with given min_distance")
+
+    # Shuffle candidates
+    np.random.shuffle(candidates)
+
+    selected_points = []
+
+    if not enforce_spacing:
+        selected_points = candidates[:n_points]
+
+    else:
+        # Enforce spacing between new points
+        tree = None
+
+        for candidate in candidates:
+            if len(selected_points) >= n_points:
+                break
+
+            candidate = candidate.astype(float)
+
+            if tree is not None:
+                dist, _ = tree.query(candidate, k=1)
+                if dist < min_distance:
+                    continue
+
+            selected_points.append(candidate)
+
+            if len(selected_points) > 1:
+                tree = cKDTree(selected_points)
+
+    print(f"Selected {len(selected_points)} points")
+
+    return np.array(selected_points)
+
+
 def create_no_class_json(input_dir, picks_dir, zarr_=False, n_points=50):
     """Create (or overwrite) no_class.json for a single tomogram folder."""
     # Load tomogram volume (supports mrc or zarr)
@@ -124,7 +203,7 @@ def create_no_class_json(input_dir, picks_dir, zarr_=False, n_points=50):
     existing_coords = parse_json_files(json_files)  # Angstrom to nm
 
     # Generate new points in nm
-    no_class_points = generate_no_class_points(
+    no_class_points = generate_no_class_points_from_distance_map(
         shape,
         existing_coords,
         min_distance=40,
@@ -175,8 +254,8 @@ def process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=50):
 
 
 if __name__ == "__main__":
-    tomo_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/ExperimentRuns_basicNoise_dens1_5_distr"
-    gt_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/ExperimentRuns_basicNoise_dens1_5_distr"
+    tomo_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/ExperimentRuns_faket_dens1_5_distr_eqCl3"
+    gt_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/ExperimentRuns_faket_dens1_5_distr_eqCl3"
 
     # Set zarr_=True if your data is in .zarr format
-    process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=25)
+    process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=150)
