@@ -303,12 +303,13 @@ def run_multi_tomogram_mode(args):
     for subfolder_path in tomogram_folders:
         tomo_paths = [subfolder_path]
         tomoID = os.path.basename(subfolder_path)
+        base_folder = os.path.basename(os.path.dirname(subfolder_path))
 
         print(f"Extracting subtomograms with labels from {subfolder_path}...")
         subtomo_files, labels, num_unmatched, unmatched_info = preprocess_tomo_with_predictions(
             tomo_paths,
             pred_path=os.path.join(args.pred_coords, f"{tomoID}_protein_detections.json"),
-            label_path=os.path.join(args.labels_root, tomoID, "Picks"),
+            label_path=os.path.join(args.labels_root, base_folder, tomoID, "Picks"),
             max_extent=max_extent,
             subtomo_output=args.subtomo_output,
             halo=halo
