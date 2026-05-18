@@ -17,5 +17,10 @@ dependencies:
     - torchvision
     - trimesh
     - zarr <3
+    - mrcfile
+    - pandas
+    - scikit-learn
+    - seaborn
     - pip:
         - napari-skimage-regionprops
+        - spotiflow

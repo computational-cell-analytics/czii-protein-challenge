@@ -39,16 +39,28 @@ def get_normalization():
 
 
 def train(testset=True, model_name="protein_classification"):
+    #variables
+    model_name = "protein_classification_czii_v62"
     in_channels = 1
     n_classes = 7
-    datasets = ["ExperimentRuns_faket_dens1_5_distr", "ExperimentRuns_basicNoise_dens1_5_distr"]
+    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3", "ExperimentRuns_basicNoise_dens1_5_distr_eqCl3"]
+    # Limit tomograms per dataset. Set to None to use all, a single int for a uniform
+    # limit, or a dict for per-dataset control, e.g.:
+    # N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl2": 5, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl2": 3} or
+    # N_TOMOGRAMS = None
+    N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl3": 25}
+
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
 
-    train_paths = get_paths("train", datasets, TRAIN_ROOT, output_path, testset=testset)
-    val_paths = get_paths("val", datasets, TRAIN_ROOT, output_path, testset=testset)
-    test_paths = get_paths("test", datasets, TRAIN_ROOT, output_path, testset=testset) if testset else []
+    train_paths = get_paths("train", datasets, TRAIN_ROOT, output_path, testset=testset, n_tomograms=N_TOMOGRAMS)
+    val_paths = get_paths("val", datasets, TRAIN_ROOT, output_path, testset=testset, n_tomograms=N_TOMOGRAMS)
+    test_paths = get_paths("test", datasets, TRAIN_ROOT, output_path, testset=testset, n_tomograms=N_TOMOGRAMS) if testset else []
+
+    print(f"Using {len(train_paths)} tomograms as train set")
+    print(f"Using {len(val_paths)} tomograms as val set")
+    print(f"Using {len(test_paths)} tomograms as test set")
 
     # Default value if no max_extent.json is found
     max_extent = 39
@@ -117,8 +129,7 @@ def main():
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
     args = parser.parse_args()
 
-    model_name = "protein_classification_czii_v55"
-    train(args.testset, model_name)
+    train(args.testset)
 
 
 if __name__ == "__main__":

@@ -3,12 +3,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 from detection.data_processing.create_heatmap import get_label, parse_json_files
-
-# TODO figure out how to correctly handle spotiflow dependency
-try:
-    from external.spotiflow.spotiflow.utils.peaks import points_to_flow3d
-except ImportError:
-    points_to_flow3d = None
+from spotiflow.utils.peaks import points_to_flow3d
 
 
 def compute_stereographic_flow(

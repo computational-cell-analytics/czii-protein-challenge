@@ -3,7 +3,7 @@ import os
 import json
 import numpy as np
 import zarr
-from typing import List, Tuple, Sequence
+from typing import Dict, List, Optional, Tuple, Sequence, Union
 from sklearn.model_selection import train_test_split
 
 from classification.data_processing import extract_subtomograms, get_max_extent
@@ -24,14 +24,31 @@ def _get_subdirs(path: str) -> List[str]:
     return sorted([name for name in os.listdir(path) if os.path.isdir(os.path.join(path, name))])
 
 
-def _require_train_val_test_split(datasets: List[str], train_root: str, output_root: str) -> None:
+def _split_file_name(ds: str, limit: Optional[int]) -> str:
+    return f"split-{ds}" + (f"-n{limit}" if limit is not None else "") + ".json"
+
+
+def _resolve_limit(ds: str, n_tomograms: Optional[Union[int, Dict[str, int]]]) -> Optional[int]:
+    if n_tomograms is None:
+        return None
+    return n_tomograms if isinstance(n_tomograms, int) else n_tomograms.get(ds)
+
+
+def _require_train_val_test_split(
+    datasets: List[str], train_root: str, output_root: str,
+    n_tomograms: Optional[Union[int, Dict[str, int]]] = None,
+) -> None:
     for ds in datasets:
-        split_path = os.path.join(output_root, f"split-{ds}.json")
+        limit = _resolve_limit(ds, n_tomograms)
+        split_path = os.path.join(output_root, _split_file_name(ds, limit))
         if os.path.exists(split_path):
             continue
 
         ds_path = os.path.join(train_root, ds)
         file_names = _get_subdirs(ds_path)
+
+        if limit is not None:
+            file_names = file_names[:limit]
 
         train, val, test = _train_val_test_split(file_names)
 
@@ -39,14 +56,21 @@ def _require_train_val_test_split(datasets: List[str], train_root: str, output_r
             json.dump({"train": train, "val": val, "test": test}, f)
 
 
-def _require_train_val_split(datasets: List[str], train_root: str, output_root: str) -> None:
+def _require_train_val_split(
+    datasets: List[str], train_root: str, output_root: str,
+    n_tomograms: Optional[Union[int, Dict[str, int]]] = None,
+) -> None:
     for ds in datasets:
-        split_path = os.path.join(output_root, f"split-{ds}.json")
+        limit = _resolve_limit(ds, n_tomograms)
+        split_path = os.path.join(output_root, _split_file_name(ds, limit))
         if os.path.exists(split_path):
             continue
 
         ds_path = os.path.join(train_root, ds)
         file_names = _get_subdirs(ds_path)
+
+        if limit is not None:
+            file_names = file_names[:limit]
 
         train, val = _train_val_split(file_names)
 
@@ -59,16 +83,18 @@ def get_paths(
     datasets: List[str],
     train_root: str,
     output_root: str,
-    testset: bool = True
+    testset: bool = True,
+    n_tomograms: Optional[Union[int, Dict[str, int]]] = None,
 ) -> List[str]:
     if testset:
-        _require_train_val_test_split(datasets, train_root, output_root)
+        _require_train_val_test_split(datasets, train_root, output_root, n_tomograms)
     else:
-        _require_train_val_split(datasets, train_root, output_root)
+        _require_train_val_split(datasets, train_root, output_root, n_tomograms)
 
     paths = []
     for ds in datasets:
-        split_path = os.path.join(output_root, f"split-{ds}.json")
+        limit = _resolve_limit(ds, n_tomograms)
+        split_path = os.path.join(output_root, _split_file_name(ds, limit))
         with open(split_path) as f:
             names = json.load(f)[split]
 
