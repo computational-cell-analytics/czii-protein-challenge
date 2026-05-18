@@ -45,7 +45,10 @@ This modular setup allows detection and classification to be trained, evaluated,
 
 - `detection/` – 3D U-Net density prediction and optional stereographic flow
 - `classification/` – 3D ResNet-based protein classification
-- `external/` – external code or resources
+- `detection_scripts/` - example scirpts for training a detection model and running protein coordinates prediction
+- `detection_scripts/evaluation/` - example scirpts for evaluating predicted protein coordinates
+- `classification_scripts/` - example scripts for training a classification model and running protein prediction and evaluation on either GT or predicted coordinates
+- `external/` – external code or resources; if EfficientNet is not needed, this can be deleted
 
 THIS IS WORK IN PROGRESS!
 
