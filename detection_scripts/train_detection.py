@@ -46,7 +46,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
 
     datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3"]
     synthetic_dataset = ["ExperimentRuns_faket_dens1_5_distr_eqCl3"] #used to save the max_extent information for the classification later
-    model_name = "protein_detection_czii_v33"
+    model_name = "protein_detection_czii_v34"
 
     print(f"Training model {model_name}")
 

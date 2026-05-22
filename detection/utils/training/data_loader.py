@@ -74,10 +74,12 @@ def create_data_loader(
     n_samples_train=None,
     n_samples_val=None,
     sampler=None,
+    train_raw_transform=None,
 ):
     train_set = _load_dataset(
         raw_paths=train_images, raw_key=raw_key, label_paths=train_labels, patch_shape=patch_shape,
-        raw_transform=raw_transform, label_transform=label_transform, transform=transform, eps=eps, sigma=sigma,
+        raw_transform=train_raw_transform if train_raw_transform is not None else raw_transform,
+        label_transform=label_transform, transform=transform, eps=eps, sigma=sigma,
         lower_bound=lower_bound, upper_bound=upper_bound, n_samples=n_samples_train,
         dataset_class=dataset_class, sampler=sampler,
     )
