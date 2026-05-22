@@ -40,15 +40,15 @@ def get_normalization():
 
 def train(testset=True, model_name="protein_classification"):
     #variables
-    model_name = "protein_classification_czii_v62"
+    model_name = "protein_classification_czii_v63"
     in_channels = 1
     n_classes = 7
-    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3", "ExperimentRuns_basicNoise_dens1_5_distr_eqCl3"]
+    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3", "ExperimentRuns_faket_dens1_5_distr_eqCl2"]
     # Limit tomograms per dataset. Set to None to use all, a single int for a uniform
     # limit, or a dict for per-dataset control, e.g.:
     # N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl2": 5, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl2": 3} or
     # N_TOMOGRAMS = None
-    N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl3": 25}
+    N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_faket_dens1_5_distr_eqCl2": 25}
 
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
