@@ -6,7 +6,7 @@ from tqdm import tqdm
 import numpy as np
 import json
 
-from detection.utils import metric_coords
+from detection.utils import metric_coords, metric_coords_per_class
 from detection.data_processing.create_heatmap import parse_json_files
 
 
@@ -46,25 +46,19 @@ def evaluate_per_protein_type(pred_coords, label_path, model_name, input_name):
         if f.endswith('.json') and f not in ('no_class.json', 'albumin.json')
     ]
     label_coords, protein_types = parse_json_files(json_files)
-    
-    # Organize label_coords by protein type
-    label_dict = {}
-    for coord, p_type in zip(label_coords, protein_types):
-        if p_type not in label_dict:
-            label_dict[p_type] = []
-        label_dict[p_type].append(coord)
-    
+
+    per_class_metrics = metric_coords_per_class(label_coords, protein_types, pred_coords)
+
+    label_count_by_class = {}
+    for p_type in protein_types:
+        label_count_by_class[p_type] = label_count_by_class.get(p_type, 0) + 1
+
     results_folder = os.path.join(os.path.dirname(__file__), "results")
     os.makedirs(results_folder, exist_ok=True)
     csv_file = os.path.join(results_folder, f"evaluation_{model_name}.csv")
-    
+
     new_rows = []
-    for protein_type, label_coords_subset in label_dict.items():
-        precision, recall, f1, dev_percentage, sMAPE, mae = metric_coords(label_coords_subset, pred_coords)
-        
-        label_count = len(label_coords_subset)
-        pred_count = len(pred_coords)
-        
+    for protein_type, (precision, recall, f1, dev_percentage, sMAPE, mae) in per_class_metrics.items():
         new_rows.append({
             "input_name": input_name,
             "protein_type": protein_type,
@@ -74,10 +68,10 @@ def evaluate_per_protein_type(pred_coords, label_path, model_name, input_name):
             "dev_percentage": dev_percentage,
             "sMAPE": sMAPE,
             "mae": mae,
-            "label_count": label_count,
-            "pred_count": pred_count
+            "label_count": label_count_by_class[protein_type],
+            "pred_count": len(pred_coords),
         })
-    
+
     update_csv(csv_file, new_rows)
     print(f"Per-protein metrics saved to {csv_file}")
 

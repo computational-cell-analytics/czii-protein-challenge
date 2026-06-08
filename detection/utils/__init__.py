@@ -5,6 +5,6 @@ from .training.training import supervised_training
 from .prediction.prediction import get_prediction_torch_em
 from .inference.protein_detection import protein_detection
 from .training.tiling_helper import parse_tiling
-from .evaluation.evaluation_metrics import metric_coords
+from .evaluation.evaluation_metrics import metric_coords, metric_coords_per_class
 from .image import load_data
 from .transform import HeatmapTransform, FlowTransform, HeatmapFlowTransform

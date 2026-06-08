@@ -1,7 +1,24 @@
+import numpy as np
 from skimage.feature import peak_local_max
 from .gridsearch import gridsearch
 
 from detection.config import ADJ_FACTOR, FLOW_SIGMA, CZII_SMALLEST_PROTEIN_SIZE
+
+
+def _nms(coords, scores, radius):
+    """Greedy NMS: keep the highest-scoring prediction; suppress all others within radius."""
+    order = np.argsort(scores)[::-1]
+    kept = []
+    suppressed = set()
+    for i in order:
+        if i in suppressed:
+            continue
+        kept.append(i)
+        for j in order:
+            if j != i and j not in suppressed:
+                if np.linalg.norm(coords[i] - coords[j]) < radius:
+                    suppressed.add(j)
+    return kept
 
 
 def protein_detection(heatmap, json_val_path, model_path, threshold=None):
@@ -36,7 +53,6 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None):
         threshold_abs=threshold
     )
 
-    # Apply stereographic flow correction
     # Extract flow channels
     flow_w = heatmap[1]
     flow_z = heatmap[2]
@@ -45,8 +61,10 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None):
 
     s = FLOW_SIGMA
 
-    # Adjust coordinates using predicted local flow
+    # Apply stereographic flow correction and clip to volume bounds
+    D, H, W = heatmap[0].shape
     adjusted_coords = []
+    scores = []
     for z, y, x in pred_coords:
         w = flow_w[z, y, x]
         vz_ = flow_z[z, y, x]
@@ -61,10 +79,17 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None):
         dy = s * vy_ / denom
         dx = s * vx_ / denom
 
-        adj_z = z + dz
-        adj_y = y + dy
-        adj_x = x + dx
+        adj_z = float(min(max(z + dz, 0), D - 1))
+        adj_y = float(min(max(y + dy, 0), H - 1))
+        adj_x = float(min(max(x + dx, 0), W - 1))
 
-        adjusted_coords.append([float(adj_z), float(adj_y), float(adj_x)])
+        adjusted_coords.append([adj_z, adj_y, adj_x])
+        scores.append(float(heatmap[0][z, y, x]))
+
+    # NMS: suppress duplicate peaks that converged to the same location after flow correction
+    if adjusted_coords:
+        nms_radius = CZII_SMALLEST_PROTEIN_SIZE * adj_factor * 0.9
+        kept = _nms(np.array(adjusted_coords), np.array(scores), nms_radius)
+        adjusted_coords = [adjusted_coords[i] for i in kept]
 
     return adjusted_coords, threshold

@@ -38,6 +38,46 @@ def _dev_percentage(n,m):
         raise Exception("Number of ground truths and/or preds are negative: gts = {n}, preds = {m}.")
         
 
+def metric_coords_per_class(gts, gt_classes, preds, match_distance=45):
+    """
+    Computes per-class metrics using a single global Hungarian matching so that
+    each prediction can only be a TP for one class (no double-counting).
+
+    gts: list/array of GT coordinates
+    gt_classes: list of class label strings, one per GT
+    preds: array of prediction coordinates
+    returns: dict mapping class -> (precision, recall, f1, dev_percentage, sMAPE, mae)
+    """
+    n = len(gts)
+    m = len(preds)
+
+    class_gt_indices = {}
+    for i, cls in enumerate(gt_classes):
+        class_gt_indices.setdefault(cls, []).append(i)
+
+    matched_gt_indices = set()
+    if n > 0 and m > 0:
+        gts_array = np.array(gts)
+        pairwise_distances = _compute_pairwise_distances(gts_array, preds)
+        if np.any(pairwise_distances < match_distance):
+            max_distance = pairwise_distances.max()
+            costs = -(pairwise_distances < match_distance).astype(float) - (max_distance - pairwise_distances) / max_distance
+            label_ind, pred_ind = linear_sum_assignment(costs)
+            match_ok = pairwise_distances[label_ind, pred_ind] < match_distance
+            matched_gt_indices = set(label_ind[match_ok])
+
+    results = {}
+    for cls, gt_indices in class_gt_indices.items():
+        n_cls = len(gt_indices)
+        tp = sum(1 for i in gt_indices if i in matched_gt_indices)
+        precision = tp / m if (tp > 0 and m > 0) else 0
+        recall = tp / n_cls if tp > 0 else 0
+        f1 = (2 * precision * recall) / (precision + recall) if (precision > 0 and recall > 0) else 0
+        results[cls] = (precision, recall, f1, _dev_percentage(n_cls, m), _calc_sMAPE(n_cls, m), _calc_mae(n_cls, m))
+
+    return results
+
+
 def metric_coords(gts, preds, match_distance=45):
     """
     gt: [(x,y), (...), ...]

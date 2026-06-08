@@ -10,4 +10,8 @@
 #/scratch/usr/nimsmuth/mambaforge/envs/synapse-net
 #/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-ne
 #/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-net/bin/python
-/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/pro-revelio/bin/python /user/muth9/u12095/czii-protein-challenge/detection_scripts/train_detection.py
+/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/pro-revelio/bin/python /user/muth9/u12095/czii-protein-challenge/detection_scripts/run_protein_detection.py \
+ -i /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/tomograms_VoxelSpacing10/ \
+ -o /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/detections/protein_detection_czii_v36/public_test_dataset_TEST \
+ -m /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models/checkpoints/protein_detection_czii_v36 \
+ -j /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_detection_czii_v36/split-ExperimentRuns_faket_dens1_5.json
