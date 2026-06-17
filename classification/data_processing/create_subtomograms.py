@@ -17,14 +17,72 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def get_non_zarr(input_path):
+    """
+    Load a single volumetric file from a directory.
+    Supports .mrc, .h5, .npy, .tif/.tiff.
+    """
+    supported_exts = ['.mrc', '.h5', '.npy', '.tif', '.tiff']
+    valid_files = [f for f in os.listdir(input_path) if os.path.splitext(f)[1].lower() in supported_exts]
+
+    if not valid_files:
+        raise FileNotFoundError(f"No supported files found in {input_path}. Supported extensions: {supported_exts}")
+
+    file_path = os.path.join(input_path, valid_files[0])
+    ext = os.path.splitext(file_path)[1].lower()
+
+    if ext == '.mrc':
+        import mrcfile
+        with mrcfile.open(file_path, permissive=True) as mrc:
+            volume = mrc.data
+    elif ext in ['.tif', '.tiff']:
+        from tifffile import imread
+        volume = imread(file_path)
+    elif ext == '.npy':
+        volume = np.load(file_path)
+    elif ext == '.h5':
+        from elf.io import open_file
+        with open_file(file_path, "r") as f:
+            keys = list(f.keys())
+            if len(keys) == 1:
+                key = keys[0]
+            elif "data" in keys:
+                key = "data"
+            elif "raw" in keys:
+                key = "raw"
+            else:
+                key = keys[0]
+            volume = f[key][:]
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
+
+    return volume
+
+
 def get_volume(input_path):
     """
-    Load 3D volume from Zarr file structure.
-    Assumes structure: input_path/VoxelSpacing10.000/denoised.zarr/0/
+    Load a 3D volume, auto-detecting the format.
+
+    If a ``.zarr`` folder is present under ``input_path`` it is used (level "0"),
+    otherwise a single ``.mrc/.h5/.npy/.tif/.tiff`` file in the directory is loaded.
     """
-    zarr_path = os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0")
-    zarr_file = zarr.open(zarr_path, mode='r')
-    return zarr_file[:]
+    zarr_folders = [
+        os.path.join(root, d)
+        for root, dirs, _ in os.walk(input_path)
+        for d in dirs
+        if d.endswith(".zarr")
+    ]
+
+    if zarr_folders:
+        # Prefer denoised.zarr if it exists
+        zarr_dir = next((f for f in zarr_folders if os.path.basename(f) == "denoised.zarr"), zarr_folders[0])
+        zarr_path = os.path.join(zarr_dir, "0")
+        if not os.path.exists(zarr_path):
+            raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
+        zarr_file = zarr.open(zarr_path, mode='r')
+        return zarr_file[:]
+
+    return get_non_zarr(input_path)
 
 
 def load_heatmap(npy_filepath):

@@ -10,16 +10,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
-from classification.training import load_peaks
+from classification.training import load_peaks, get_volume
 from classification.data_processing import extract_subtomograms
 from classification.utils import protein_classification
 
 #TODO update this script if needed
-
-def get_volume(input_path: str) -> np.ndarray:
-    zarr_file = zarr.open(os.path.join(input_path, "VoxelSpacing10.000", "denoised.zarr", "0"), mode='r')
-    input_volume = zarr_file[:]
-    return input_volume
 
 
 def run_protein_classification(input_paths, output_path: str, model_path: str, batch_size: int = 16):

@@ -11,15 +11,24 @@ LABEL_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/s
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
 
 
-def find_zarr_or_mrc(base_path):
+# Supported single-file tomogram formats (everything except .zarr, which is a folder).
+NON_ZARR_EXTS = (".mrc", ".h5", ".hdf5", ".tif", ".tiff")
+
+
+def find_tomogram(base_path):
+    """Resolve a tomogram directory to its actual data path.
+
+    Prefers a ``.zarr`` folder (``denoised.zarr`` if present), otherwise returns
+    the first supported single file (.mrc/.h5/.hdf5/.tif/.tiff).
+    """
     zarr_folders = []
-    
+
     # Walk through all subdirectories recursively
     for root, dirs, files in os.walk(base_path):
         for d in dirs:
             if d.endswith(".zarr"):
                 zarr_folders.append(os.path.join(root, d))
-    
+
     if zarr_folders:
         # Prefer denoised.zarr if it exists
         for folder in zarr_folders:
@@ -27,26 +36,32 @@ def find_zarr_or_mrc(base_path):
                 return folder
         # Otherwise, return the first .zarr found
         return zarr_folders[0]
-    
-    # If no .zarr found, look for .mrc files
-    mrc_files = []
+
+    # If no .zarr found, look for a supported single file (.mrc, .h5, .tif, ...)
+    data_files = []
     for root, dirs, files in os.walk(base_path):
         for f in files:
-            if f.endswith(".mrc"):
-                mrc_files.append(os.path.join(root, f))
-    
-    if not mrc_files:
-        raise FileNotFoundError(f"No .zarr folder or .mrc file found in {base_path}")
-    
-    # Return the first .mrc found
-    return mrc_files[0]
+            if os.path.splitext(f)[1].lower() in NON_ZARR_EXTS:
+                data_files.append(os.path.join(root, f))
+
+    if not data_files:
+        raise FileNotFoundError(
+            f"No .zarr folder or supported file ({NON_ZARR_EXTS}) found in {base_path}"
+        )
+
+    # Return the first supported file found
+    return data_files[0]
+
+
+# Backwards-compatible alias.
+find_zarr_or_mrc = find_tomogram
 
 
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr", save_max_extent=True):
 
-    datasets = ["ExperimentRuns_faket_dens1_5"]
-    synthetic_dataset = ["ExperimentRuns_faket_dens1_5"] #used to save the max_extent information for the classification later
-    model_name = "protein_detection_czii_v36"
+    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3"]
+    synthetic_dataset = ["ExperimentRuns_faket_dens1_5_distr_eqCl3"] #used to save the max_extent information for the classification later
+    model_name = "protein_detection_czii_v38"
 
     print(f"Training model {model_name}")
 
@@ -74,15 +89,19 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     print(len(train_paths), "tomograms for training")
     print(len(val_paths), "tomograms for validation")
 
-    patch_shape = [48, 256, 256]
+    patch_shape = [128, 256, 256]
 
     batch_size = 2
     check = False
 
-    # add the zarr file path ending to each path
-    train_paths = [find_zarr_or_mrc(path) for path in train_paths]
-    val_paths = [find_zarr_or_mrc(path) for path in val_paths]
-    test_paths = [find_zarr_or_mrc(path) for path in test_paths]
+    # Resolve each tomogram directory to its actual data path (zarr / mrc / h5 / tif).
+    train_paths = [find_tomogram(path) for path in train_paths]
+    val_paths = [find_tomogram(path) for path in val_paths]
+    test_paths = [find_tomogram(path) for path in test_paths] if test_paths is not None else None
+
+    # The raw key only applies to container formats. Zarr stores the volume at
+    # multiscale level "0"; for other formats let the loader pick the dataset.
+    raw_key = "0" if all(p.endswith(".zarr") for p in train_paths) else None
 
     print(f"train_paths {train_paths}")
     print(f"val_paths{val_paths}")
@@ -97,7 +116,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
         train_label_paths=train_label_paths,
         val_paths=val_paths,
         val_label_paths=val_label_paths,
-        raw_key="0",
+        raw_key=raw_key,
         patch_shape=patch_shape, batch_size=batch_size,
         check=check,
         lr=1e-4,

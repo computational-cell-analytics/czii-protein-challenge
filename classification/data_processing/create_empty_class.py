@@ -9,43 +9,72 @@ import zarr
 from scipy.ndimage import distance_transform_edt
 
 def get_non_zarr(input_path):
-    """Load .mrc tomogram from a folder containing exactly one .mrc file."""
-    mrc_files = [f for f in os.listdir(input_path) if f.lower().endswith('.mrc')]
-    print(f"mrc_files {mrc_files}")
-    
-    if not mrc_files:
-        raise FileNotFoundError(f"No .mrc file found in {input_path}")
-    if len(mrc_files) > 1:
-        raise ValueError(f"Multiple .mrc files found in {input_path}: {mrc_files}")
-    
-    mrc_path = os.path.join(input_path, mrc_files[0])
-    print(f"mrc_path {mrc_path}")
-    with mrcfile.open(mrc_path, permissive=True) as mrc:
-        input_volume = mrc.data.astype(np.float32)
-    return input_volume
+    """
+    Load a single volumetric file from a directory.
+    Supports .mrc, .h5, .npy, .tif/.tiff.
+    """
+    supported_exts = ['.mrc', '.h5', '.npy', '.tif', '.tiff']
+    valid_files = [f for f in os.listdir(input_path) if os.path.splitext(f)[1].lower() in supported_exts]
+    print(f"valid_files {valid_files}")
+
+    if not valid_files:
+        raise FileNotFoundError(f"No supported files found in {input_path}. Supported extensions: {supported_exts}")
+
+    file_path = os.path.join(input_path, valid_files[0])
+    ext = os.path.splitext(file_path)[1].lower()
+    print(f"file_path {file_path}")
+
+    if ext == '.mrc':
+        with mrcfile.open(file_path, permissive=True) as mrc:
+            volume = mrc.data
+    elif ext in ['.tif', '.tiff']:
+        from tifffile import imread
+        volume = imread(file_path)
+    elif ext == '.npy':
+        volume = np.load(file_path)
+    elif ext == '.h5':
+        from elf.io import open_file
+        with open_file(file_path, "r") as f:
+            keys = list(f.keys())
+            if len(keys) == 1:
+                key = keys[0]
+            elif "data" in keys:
+                key = "data"
+            elif "raw" in keys:
+                key = "raw"
+            else:
+                key = keys[0]
+            volume = f[key][:]
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
+
+    return np.asarray(volume).astype(np.float32)
 
 
-def get_volume(input_path: str, zarr_: bool = False) -> np.ndarray:
-    """Load a tomogram from either .zarr or .mrc format."""
-    if zarr_:
-        # Recursive search for .zarr folders
-        zarr_folders = []
-        for root, dirs, files in os.walk(input_path):
-            for d in dirs:
-                if d.endswith(".zarr"):
-                    zarr_folders.append(os.path.join(root, d))
-        
-        if not zarr_folders:
-            raise FileNotFoundError(f"No .zarr folder found under {input_path}")
-        
+def get_volume(input_path: str, zarr_: bool = None) -> np.ndarray:
+    """Load a tomogram, auto-detecting the format.
+
+    If a ``.zarr`` folder is present under ``input_path`` it is used, otherwise
+    the loader falls back to a single ``.mrc/.h5/.npy/.tif/.tiff`` file. The
+    ``zarr_`` argument is kept for backwards compatibility but is ignored.
+    """
+    # Recursive search for .zarr folders
+    zarr_folders = [
+        os.path.join(root, d)
+        for root, dirs, _ in os.walk(input_path)
+        for d in dirs
+        if d.endswith(".zarr")
+    ]
+
+    if zarr_folders:
         # Prefer denoised.zarr if it exists
         zarr_dir = next((f for f in zarr_folders if os.path.basename(f) == "denoised.zarr"), zarr_folders[0])
-        
+
         # Append "0" subfolder
         zarr_path = os.path.join(zarr_dir, "0")
         if not os.path.exists(zarr_path):
             raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
-        
+
         zarr_file = zarr.open(zarr_path, mode="r")
         volume = zarr_file[:].astype(np.float32)
     else:

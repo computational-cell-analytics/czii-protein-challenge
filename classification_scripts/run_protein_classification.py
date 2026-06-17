@@ -165,6 +165,22 @@ def run_multiple_mode(args):
         if os.path.isdir(os.path.join(args.input_path, sf))
     ]
 
+    # Optionally restrict to the test set defined in a split JSON file
+    if args.split_file:
+        with open(args.split_file, "r") as f:
+            split = json.load(f)
+        test_names = set(split["test"])
+        tomogram_folders = [
+            folder for folder in tomogram_folders
+            if os.path.basename(folder) in test_names
+        ]
+        print(f"Restricting to {len(tomogram_folders)} test tomograms from {args.split_file}: "
+              f"{sorted(os.path.basename(f) for f in tomogram_folders)}")
+        if not tomogram_folders:
+            raise ValueError(
+                f"No test tomograms from {args.split_file} found in {args.input_path}."
+            )
+
     # Pick 10% of tomograms for per-tomogram evaluation
     n_eval = max(1, int(len(tomogram_folders) * 0.1))
     eval_tomos = set(random.sample(tomogram_folders, n_eval))
@@ -305,10 +321,15 @@ def main():
         "--multiple", "-mlp", action="store_true",
         help="Activate when input_path contains multiple directories for inference."
     )
+    parser.add_argument(
+        "--split_file", "-s", type=str, default=None,
+        help="Path to a split JSON file. If given, only the tomograms listed under "
+             "its 'test' key are taken from --input_path and classified."
+    )
 
     args = parser.parse_args()
     
-    if args.multiple:
+    if args.multiple or args.split_file:
         run_multiple_mode(args)
     else:
         run_single_mode(args)

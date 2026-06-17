@@ -6,10 +6,33 @@ from detection.data_processing.create_heatmap import get_label, parse_json_files
 from spotiflow.utils.peaks import points_to_flow3d
 
 
+def _bb_starts_stops(bb: Tuple[slice, ...]) -> Tuple[np.ndarray, np.ndarray]:
+    """Extract the spatial (z, y, x) starts and stops from a bounding box of slices.
+
+    Drops a leading channel slice if present (bb may be (slice(None), z, y, x)).
+    """
+    starts = []
+    stops = []
+    for s in bb:
+        if isinstance(s, slice):
+            start = 0 if s.start is None else s.start
+            stop = None if s.stop is None else s.stop
+            starts.append(start)
+            stops.append(stop)
+    if len(starts) >= 3:
+        # take last 3 slices if an extra channel slice was prepended
+        starts = starts[-3:]
+        stops = stops[-3:]
+    elif len(starts) != 3:
+        raise ValueError("bb must contain 3 spatial slices (z,y,x) or channel plus 3 slices.")
+    return np.array(starts, dtype=np.float32), np.array(stops, dtype=np.float32)
+
+
 def compute_stereographic_flow(
     coords: np.ndarray,
     patch_shape: Tuple[int, int, int],
     bb: Optional[Tuple[slice, ...]] = None,
+    filter_bb: Optional[Tuple[slice, ...]] = None,
     sigma: float = 1.5,
     grid: Union[int, Tuple[int, int, int]] = (1, 1, 1),
 ) -> np.ndarray:
@@ -22,8 +45,14 @@ def compute_stereographic_flow(
     patch_shape : tuple(int,int,int)
         (z, y, x) shape in pixels of the output patch where flow will be computed.
     bb : tuple(slice,...), optional
-        If provided, the bounding-box (in full-image coordinates) used to sample the patch.
-        The function will offset coords into patch-local coordinates by subtracting bb.start values.
+        If provided, the bounding-box (in full-image coordinates) of the loaded patch.
+        Used to offset coords into patch-local coordinates by subtracting bb.start values,
+        so the flow grid (of size `patch_shape`) is aligned with this bounding box.
+    filter_bb : tuple(slice,...), optional
+        If provided, only points whose absolute coordinates fall inside this bounding-box
+        are used for the flow. Use this to restrict the flow to proteins inside the inner
+        patch while still computing the flow on the (larger, halo-extended) `bb` grid.
+        If None, points inside `bb` are used (the previous behaviour).
     sigma : float
         stereographic scale passed to points_to_flow3d
     grid : int or tuple(int,int,int)
@@ -43,33 +72,21 @@ def compute_stereographic_flow(
 
     # If we have a bounding box, shift coordinates into patch-local coordinates and filter
     if bb is not None:
-        # bb is expected to be a tuple of slices (z_slice, y_slice, x_slice)
-        # If bb has channel dimension included (slice(None), ...) try to drop it
-        # Find first slice with non-None start that looks like spatial slice
-        # We'll assume bb contains only spatial slices here
-        starts = []
-        stops = []
-        for s in bb:
-            if isinstance(s, slice):
-                start = 0 if s.start is None else s.start
-                stop = None if s.stop is None else s.stop
-                starts.append(start)
-                stops.append(stop)
-        if len(starts) >= 3:
-            # take last 3 slices if extra channel slice was prepended
-            starts = starts[-3:]
-            stops = stops[-3:]
-        elif len(starts) != 3:
-            raise ValueError("bb must contain 3 spatial slices (z,y,x) or channel plus 3 slices.")
+        starts, stops = _bb_starts_stops(bb)
 
-        starts = np.array(starts, dtype=np.float32)
-        stops = np.array(stops, dtype=np.float32)
-
-        # Shift coords into patch-local coordinates
+        # Shift coords into patch-local coordinates (aligned with the `bb` grid)
         if coords.shape[0] > 0:
             coords_local = coords - starts[np.newaxis, :]
-            # Keep points that fall inside the patch bounds [0, size)
-            inside_mask = np.all((coords_local >= 0) & (coords_local < (stops - starts)), axis=1)
+            if filter_bb is not None:
+                # Keep only points inside the inner patch (absolute coordinates), so proteins
+                # in the halo region just outside the patch are excluded from the flow.
+                f_starts, f_stops = _bb_starts_stops(filter_bb)
+                inside_mask = np.all(
+                    (coords >= f_starts[np.newaxis, :]) & (coords < f_stops[np.newaxis, :]), axis=1
+                )
+            else:
+                # Keep points that fall inside the loaded patch bounds [0, size)
+                inside_mask = np.all((coords_local >= 0) & (coords_local < (stops - starts)), axis=1)
             coords_local = coords_local[inside_mask]
         else:
             coords_local = coords.copy()
@@ -125,7 +142,7 @@ class FlowTransform:
         self.sigma = sigma
         self.grid = grid
 
-    def __call__(self, label_path, shape, bb_labels=None, bb_for_loading=None):
+    def __call__(self, label_path, shape, bb_for_loading=None, filter_bb=None):
         patch_spatial_shape = shape[-3:]
 
         json_files = [
@@ -141,6 +158,7 @@ class FlowTransform:
             coords,
             patch_spatial_shape,
             bb=bb_for_loading,
+            filter_bb=filter_bb,
             sigma=self.sigma,
             grid=self.grid,
         )
@@ -171,19 +189,23 @@ class HeatmapFlowTransform:
             grid=flow_grid,
         )
 
-    def __call__(self, label_path, shape, bb_labels, bb_for_loading):
-        # Heatmap
+    def __call__(self, label_path, shape, bb_labels, bb_for_loading, bb_inner=None):
+        # Heatmap: computed over the (halo-extended) bb_labels, so proteins just outside
+        # the patch (within the halo) still contribute their Gaussian tails.
         heatmap = self.heatmap_transform(
             label_path, shape, bb_labels
         )
 
         patch_spatial_shape = heatmap.shape[-3:]
 
-        # stereographic Flow
+        # stereographic Flow: computed on the same (halo-extended) grid as the heatmap
+        # (via bb_for_loading), but restricted to proteins inside the inner patch
+        # (bb_inner) so that points just outside the patch are NOT used for the flow.
         flow = self.flow_transform(
             label_path,
             patch_spatial_shape,
             bb_for_loading,
+            bb_inner,
         )
 
         # Add heatmap channel

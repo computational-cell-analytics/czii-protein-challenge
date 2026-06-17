@@ -8,17 +8,22 @@ def get_default_tiling():
         print("Determining suitable tiling")
 
         # We always use the same default halo.
-        halo = {"x": 64, "y": 64, "z": 16}  # before 64,64,8
+        halo = {"x": 64, "y": 64, "z": 32}  # before 64,64,16 (z raised to >=32)
 
         # Determine the GPU RAM and derive a suitable tiling.
+        # NOTE: the network input along each axis equals `tile` (see prediction.py:
+        # block_shape = tile - 2*halo, input = block_shape + 2*halo = tile), so `tile`
+        # must stay divisible by the U-Net factor (z%8, x/y%16) and `tile - 2*halo` (the
+        # block_shape / output step) must stay positive. With halo z=32 we raise each tile
+        # z by 32 vs. before to keep the same block_shape z (80->48, 64->32, 48->16).
         vram = torch.cuda.get_device_properties(0).total_memory / 1e9
 
         if vram >= 80:
-            tile = {"x": 640, "y": 640, "z": 80}
+            tile = {"x": 640, "y": 640, "z": 112}
         elif vram >= 40:
-            tile = {"x": 512, "y": 512, "z": 64}
+            tile = {"x": 512, "y": 512, "z": 96}
         elif vram >= 20:
-            tile = {"x": 352, "y": 352, "z": 48}
+            tile = {"x": 352, "y": 352, "z": 80}
         else:
             # TODO determine tilings for smaller VRAM
             raise NotImplementedError(f"Estimating the tile size for a GPU with {vram} GB is not yet supported.")

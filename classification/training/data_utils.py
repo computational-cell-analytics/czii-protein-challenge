@@ -138,7 +138,7 @@ def get_non_zarr(input_path):
         volume = np.load(file_path)
     elif ext == '.h5':
         from elf.io import open_file
-        with open_file(input_path, "r") as f:
+        with open_file(file_path, "r") as f:
 
             # Try to automatically derive the key with the raw data.
             keys = list(f.keys())
@@ -148,6 +148,8 @@ def get_non_zarr(input_path):
                 key = "data"
             elif "raw" in keys:
                 key = "raw"
+            else:
+                key = keys[0]
 
             volume = f[key][:]
     else:

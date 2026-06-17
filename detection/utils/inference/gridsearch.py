@@ -51,7 +51,7 @@ def get_non_zarr(input_path):
         volume = np.load(file_path)
     elif ext == '.h5':
         from elf.io import open_file
-        with open_file(input_path, "r") as f:
+        with open_file(file_path, "r") as f:
 
             # Try to automatically derive the key with the raw data.
             keys = list(f.keys())
@@ -61,6 +61,8 @@ def get_non_zarr(input_path):
                 key = "data"
             elif "raw" in keys:
                 key = "raw"
+            else:
+                key = keys[0]
 
             volume = f[key][:]
     else:
@@ -157,11 +159,11 @@ def gridsearch(json_val_path, model_path):
 
             adj_factor = ADJ_FACTOR
 
-            pred_coords = peak_local_max(pred, min_distance=int(CZII_SMALLEST_PROTEIN_SIZE*adj_factor * 0.9), threshold_abs=thresh)
-            _, _, f1, _, _, _ = metric_coords(label_coords, pred_coords) 
+            pred_coords = peak_local_max(pred, min_distance=int(CZII_SMALLEST_PROTEIN_SIZE*adj_factor * 1), threshold_abs=thresh)
+            precision, recall, f1, _, _, _ = metric_coords(label_coords, pred_coords)
 
-            data.append([f1, thresh])
-            print(f"f1 and corresponding thresholds: {data}")
+            data.append([f1, precision, recall, thresh])
+            print(f"f1, precision, recall and corresponding thresholds: {data}")
 
         #Alternative using list conprehension
         '''
@@ -173,8 +175,15 @@ def gridsearch(json_val_path, model_path):
         for thresh in tqdm(threshes)
         ])'''
 
-    df = pandas.DataFrame(data=data, columns=["f1", "Threshold"])
-    best_thresh = df.loc[df["f1"].idxmax(), "Threshold"]
+    df = pandas.DataFrame(data=data, columns=["f1", "precision", "recall", "Threshold"])
+    # F_beta with beta=0.5 weights precision ~4x relative to recall in the harmonic mean,
+    # favouring fewer false positives while still rewarding reasonable recall.
+    beta = 0.5
+    df["f_beta"] = (
+        (1 + beta**2) * df["precision"] * df["recall"]
+        / (beta**2 * df["precision"] + df["recall"] + 1e-8)
+    )
+    best_thresh = df.loc[df["f_beta"].idxmax(), "Threshold"]
 
     print(f"The best threshold according to the val set {val_list} is {best_thresh}")
 

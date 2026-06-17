@@ -51,7 +51,7 @@ def get_non_zarr(input_path):
         volume = np.load(file_path)
     elif ext == '.h5':
         from elf.io import open_file
-        with open_file(input_path, "r") as f:
+        with open_file(file_path, "r") as f:
 
             # Try to automatically derive the key with the raw data.
             keys = list(f.keys())
@@ -61,6 +61,8 @@ def get_non_zarr(input_path):
                 key = "data"
             elif "raw" in keys:
                 key = "raw"
+            else:
+                key = keys[0]
 
             volume = f[key][:]
     else:
@@ -69,34 +71,39 @@ def get_non_zarr(input_path):
     return volume
 
 
-def get_volume(input_path: str, zarr_: bool) -> np.ndarray:
-    if zarr_:
-        # Recursive search for .zarr folders
-        zarr_folders = []
-        for root, dirs, files in os.walk(input_path):
-            for d in dirs:
-                if d.endswith(".zarr"):
-                    zarr_folders.append(os.path.join(root, d))
-        
-        if not zarr_folders:
-            raise FileNotFoundError(f"No .zarr folder found under {input_path}")
-        
+def get_volume(input_path: str, zarr_: bool = None) -> np.ndarray:
+    """Load a tomogram, auto-detecting the format.
+
+    If a ``.zarr`` folder is present under ``input_path`` it is used, otherwise
+    the loader falls back to a single ``.mrc/.h5/.npy/.tif/.tiff`` file
+    (see :func:`get_non_zarr`). The ``zarr_`` argument is kept for backwards
+    compatibility but is ignored: the format is detected automatically.
+    """
+    # Recursive search for .zarr folders
+    zarr_folders = [
+        os.path.join(root, d)
+        for root, dirs, _ in os.walk(input_path)
+        for d in dirs
+        if d.endswith(".zarr")
+    ]
+
+    if zarr_folders:
         # Prefer denoised.zarr if it exists
         zarr_dir = next((f for f in zarr_folders if os.path.basename(f) == "denoised.zarr"), zarr_folders[0])
-        
+
         # Append "0" subfolder
         zarr_path = os.path.join(zarr_dir, "0")
         print(f"Using volume path: {zarr_path}")
         if not os.path.exists(zarr_path):
             raise FileNotFoundError(f"Expected '0' subfolder inside {zarr_dir}, but not found.")
-        
+
         # Open and load volume
         zarr_file = zarr.open(zarr_path, mode="r")
         volume = zarr_file[:]
-        
     else:
+        # Fallback to non-zarr loader
         volume = get_non_zarr(input_path)
-    
+
     return volume
 
 
@@ -270,7 +277,7 @@ def preprocess_tomo_with_predictions(
 
     for tomo_path in tomo_paths:
         experiment_name = os.path.basename(tomo_path)
-        raw_volume = get_volume(tomo_path, zarr_=True)
+        raw_volume = get_volume(tomo_path)
 
         # Convert from (x, y, z) to (z, y, x)
         coords_for_extract = [(int(c[0]), int(c[1]), int(c[2])) for c in coords_global]
@@ -347,7 +354,7 @@ def preprocess_tomo_with_labels(
 
     for tomo_path, coords, targets in zip(tomo_paths, coords_all, targets_all):
         experiment_name = os.path.basename(tomo_path)
-        raw_volume = get_volume(tomo_path, zarr_=True)
+        raw_volume = get_volume(tomo_path)
 
         if halo is not None:
             subtomograms, valid_coords, targets = extract_subtomograms(raw_volume, coords, max_extent, halo=halo, targets=targets)

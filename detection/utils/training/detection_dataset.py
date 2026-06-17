@@ -147,11 +147,15 @@ class DetectionDataset(torch.utils.data.Dataset):
         raw = self.raw[bb_raw]
 
         #get labels
+        # bb is the inner patch (without halo); bb_for_loading is extended by the halo.
+        # The flow uses bb as filter so only proteins inside the inner patch contribute,
+        # while the heatmap (via bb_labels) still includes proteins in the halo border.
         labels = self.label_transform(
             self.label_path,
             self.shape,
             bb_labels,
             bb_for_loading,
+            bb,
         )
 
         #Crop out the halo so all outputs match original bounding box

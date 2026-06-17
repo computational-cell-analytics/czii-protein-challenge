@@ -49,7 +49,7 @@ def protein_detection(heatmap, json_val_path, model_path, threshold=None):
     # Find peaks in heatmap
     pred_coords = peak_local_max(
         heatmap[0],
-        min_distance=int(CZII_SMALLEST_PROTEIN_SIZE * adj_factor * 0.9),
+        min_distance=int(CZII_SMALLEST_PROTEIN_SIZE * adj_factor * 1),
         threshold_abs=threshold
     )
 
