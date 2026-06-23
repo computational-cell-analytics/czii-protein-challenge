@@ -11,6 +11,7 @@ from .trainer import ProteinClassificationTrainer
 from .data_loader import create_data_loader
 from .classification_dataset import ClassificationDataset
 from .trainer import default_classification_trainer
+from .loss import FocalLossWithLabelSmoothing
 
 from torch_em.model.resnet3d import resnet3d_18
 import torch.nn as nn
@@ -149,6 +150,17 @@ def classification_training(
     # Set the default loss and metric (if no values where passed).
     loss = torch.nn.CrossEntropyLoss() if loss is None else loss
     metric = ClassificationMetric() if metric is None else metric
+
+    # If the focal loss is set to data-balanced alpha, compute inverse-frequency
+    # class weights from the training targets. Class counts are derived at runtime,
+    # so they never need to be hard-coded per dataset.
+    if isinstance(loss, FocalLossWithLabelSmoothing) and loss.needs_alpha:
+        train_set = train_loader.dataset
+        counts, alpha = loss.set_alpha_from_targets(
+            train_set.targets, label_to_index=train_set.label_to_index
+        )
+        print(f"[FocalLoss] train class counts (by index): {counts.tolist()}")
+        print(f"[FocalLoss] inverse-frequency alpha:       {alpha.tolist()}")
 
     trainer = default_classification_trainer(
         name=name,

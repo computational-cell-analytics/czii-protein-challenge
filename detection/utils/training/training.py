@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from .data_loader import create_data_loader
 from .detection_dataset import DetectionDataset
-from .augmentations import ContrastAugmentation
+from .augmentations import ContrastAugmentation, RandomRescale
 from ..transform import HeatmapFlowTransform
 
 from detection.config import FLOW_SIGMA
@@ -131,7 +131,11 @@ def supervised_training(
         transform = None
 
     train_raw_transform = ContrastAugmentation()
-    
+
+    # Train-only joint (raw, labels) augmentation. Random isotropic rescaling between
+    # 90% and 110% to simulate pixel-/particle-size variation (as in easymode).
+    train_transform = RandomRescale(p=0.5, scale_range=(0.9, 1.1))
+
     if label_transform is None:
         label_transform = HeatmapFlowTransform(
             eps=eps,
@@ -151,6 +155,7 @@ def supervised_training(
                                                      raw_transform=raw_transform, label_transform=label_transform,
                                                      transform=transform,
                                                      train_raw_transform=train_raw_transform,
+                                                     train_transform=train_transform,
                                                      patch_shape=patch_shape, num_workers=num_workers,
                                                      batch_size=batch_size, raw_key=raw_key,
                                                      eps=eps, sigma=sigma,

@@ -76,11 +76,12 @@ def create_data_loader(
         dataset_class, n_samples_train, n_classes
     )
 
+    # Augmentation is applied to the train set only; val/test stay deterministic.
     val_set = _load_dataset(
         val_data,
         in_channels, max_extent, target_root,
         patch_shape,
-        normalization, augmentation,
+        normalization, None,
         dataset_class, n_samples_val, n_classes
     )
 
@@ -88,7 +89,7 @@ def create_data_loader(
         test_data,
         in_channels, max_extent, target_root,
         patch_shape,
-        normalization, augmentation,
+        normalization, None,
         dataset_class, n_classes=n_classes
     )
 

@@ -44,6 +44,58 @@ def gaussian_blur_3d(volume, sigma_range=(0.3, 1.0)):
     return volume.squeeze(0)
 
 
+def _center_crop_or_pad(volume, target_shape):
+    #volume: (C, D, H, W); target_shape: (D, H, W)
+    #center-crop the dimensions that are too large
+    slices = [slice(None)]
+    for cur, tgt in zip(volume.shape[1:], target_shape):
+        if cur > tgt:
+            start = (cur - tgt) // 2
+            slices.append(slice(start, start + tgt))
+        else:
+            slices.append(slice(None))
+    volume = volume[tuple(slices)]
+
+    #center-pad the dimensions that are too small (replicate edges to avoid hard borders)
+    pad = []
+    for cur, tgt in zip(volume.shape[1:], target_shape):  # D, H, W order
+        if cur < tgt:
+            total = tgt - cur
+            before = total // 2
+            pad.append((before, total - before))
+        else:
+            pad.append((0, 0))
+    #F.pad expects the last spatial dim first: (W_before, W_after, H_..., D_...)
+    pad_arg = [v for bef_aft in reversed(pad) for v in bef_aft]
+    if any(pad_arg):
+        volume = F.pad(volume.unsqueeze(0), pad_arg, mode="replicate").squeeze(0)
+
+    return volume
+
+
+#random isotropic rescaling to simulate pixel-/particle-size variation (as in easymode);
+#>1 zooms in (particles appear larger), <1 zooms out (smaller). The volume is rescaled and
+#then cropped/padded back to its original shape so the particle stays centered.
+def random_rescale(volume, scale_range=(0.9, 1.1)):
+    #volume: (C, D, H, W)
+    scale = random.uniform(*scale_range)
+    c, d, h, w = volume.shape
+    new_size = (
+        max(1, int(round(d * scale))),
+        max(1, int(round(h * scale))),
+        max(1, int(round(w * scale))),
+    )
+
+    rescaled = F.interpolate(
+        volume.unsqueeze(0),
+        size=new_size,
+        mode="trilinear",
+        align_corners=False,
+    ).squeeze(0)
+
+    return _center_crop_or_pad(rescaled, (d, h, w))
+
+
 def random_intensity(
     volume,
     scale_range=(0.95, 1.05),
@@ -85,6 +137,10 @@ class CryoETAugment:
         if random.random() < 0.4:
             volume = random_intensity(volume)
             info.append("intensity")
+
+        if random.random() < 0.3:
+            volume = random_rescale(volume)
+            info.append("rescale")
 
         if return_info:
             return volume, info

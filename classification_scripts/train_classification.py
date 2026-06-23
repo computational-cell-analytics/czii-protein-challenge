@@ -40,15 +40,15 @@ def get_normalization():
 
 def train(testset=True, model_name="protein_classification"):
     #variables
-    model_name = "protein_classification_czii_v63"
+    model_name = "protein_classification_czii_v65"
     in_channels = 1
     n_classes = 7
-    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3", "ExperimentRuns_faket_dens1_5_distr_eqCl2"]
+    datasets = ["ExperimentRuns"]
     # Limit tomograms per dataset. Set to None to use all, a single int for a uniform
     # limit, or a dict for per-dataset control, e.g.:
     # N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl2": 5, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl2": 3} or
-    # N_TOMOGRAMS = None
-    N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_faket_dens1_5_distr_eqCl2": 25}
+    N_TOMOGRAMS = None
+    #N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_faket_dens1_5_distr_eqCl2": 25}
 
 
     output_path = os.path.join(OUTPUT_ROOT, model_name)
@@ -90,6 +90,8 @@ def train(testset=True, model_name="protein_classification"):
     focal_loss = FocalLossWithLabelSmoothing(
         num_classes=n_classes,
         gamma=2.0,
+        alpha="balanced",  # inverse-frequency weights, computed from the training data
+        alpha_beta=0.5,    # sqrt-tempered: gentler than full inverse-frequency (beta=1)
         label_smoothing=0.1,
     )
 
