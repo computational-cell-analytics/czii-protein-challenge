@@ -14,3 +14,6 @@ _debug_augmented_examples/
 .env
 
 *.egg-info/
+
+#ignore files
+czii-protein-challenge/STA/8Apx_tmp.star

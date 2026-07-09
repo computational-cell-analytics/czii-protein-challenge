@@ -5,3 +5,4 @@ from .cryoET_augmentation import CryoETAugment
 from .normalization import CryoETNormalize
 from .loss import FocalLossWithLabelSmoothing
 from .trainer import default_classification_trainer, ProteinClassificationTrainer
+from .domain_adaptation import mean_teacher_adaptation as mean_teacher_adaptation_classification

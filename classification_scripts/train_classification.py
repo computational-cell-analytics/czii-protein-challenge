@@ -40,7 +40,7 @@ def get_normalization():
 
 def train(testset=True, model_name="protein_classification"):
     #variables
-    model_name = "protein_classification_czii_v65"
+    model_name = "protein_classification_czii_v66"
     in_channels = 1
     n_classes = 7
     datasets = ["ExperimentRuns"]
@@ -91,7 +91,7 @@ def train(testset=True, model_name="protein_classification"):
         num_classes=n_classes,
         gamma=2.0,
         alpha="balanced",  # inverse-frequency weights, computed from the training data
-        alpha_beta=0.5,    # sqrt-tempered: gentler than full inverse-frequency (beta=1)
+        alpha_beta=0.3,    # sqrt-tempered: gentler than full inverse-frequency (beta=1)
         label_smoothing=0.1,
     )
 
@@ -109,7 +109,7 @@ def train(testset=True, model_name="protein_classification"):
         lr=1e-4,
         logger=ClassificationLogger,
         trainer_class=ProteinClassificationTrainer,
-        n_iterations=8e3,
+        n_iterations=2e3,
         out_channels=n_classes,
         in_channels=in_channels,
         loss=focal_loss, #torch.nn.CrossEntropyLoss(),#focal_loss,
