@@ -12,8 +12,8 @@ Two kinds of result:
 - **B. De-novo 3D auto-refine**: RELION searches orientations itself, gives a
   gold-standard FSC. GPU + MPI. `-> <species>/Refine3D/run_class001.mrc`
 
-RELION 4.0.2: `/user/muth9/u12095/software/relion/install/bin`
-(`relion_refine` = CPU; `relion_refine_mpi` = GPU/CUDA build).
+RELION comes from the cluster module: `module load gcc/13.2.0 openmpi/5.0.7
+relion/4.0.1` (GPU-enabled; `relion/5.0.0` also available). Easiest: `source env.sh`.
 
 ---
 
@@ -71,7 +71,7 @@ GT-angle average, use Option 1.
 
 - `relion_refine` (serial) is CPU-only; the GPU build is `relion_refine_mpi`
   (used automatically when MPI procs > 1 / in `run_refine3d.sh`).
-- Reconstructions are Z-mirrored vs the true PDB (IMOD handedness); flip in Z to
-  compare to a deposited structure.
+- The reconstruction preserves the coordinate frame (no z-flip / no mirror), so
+  maps should have the correct handedness vs a deposited structure.
 - 10 A/voxel, SNR ~0.11, smooth simulated densities -> expect low resolution,
   mostly overall-shape recovery.

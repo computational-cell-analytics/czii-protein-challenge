@@ -8,11 +8,11 @@ GT->RELION recipe (see README.md). NOTE: the overlay *.json orientations are
 BUGGY (scalar-first quaternion read as scalar-last) -- we read the motif-list
 CSV directly and rebuild the matrix correctly.
 
-Recipe per particle:
-  R_pn  = quaternion matrix from (w,x,y,z)=(Q1,Q2,Q3,Q4)      # scalar-first
-  R_tomo= M @ R_pn @ M          (M=diag(1,1,-1); IMOD z-flip)
-  rot,tilt,psi = relion_euler.matrix2angles(R_tomo)
-  coords: ix=x/apix, iy=y/apix, iz=(nz-1)-z/apix
+Recipe per particle (verified: reconstruction preserves the coordinate frame,
+NO z-flip -- see notes; the earlier z-flip was a VLP hollow-shell artifact):
+  R_pn = quaternion matrix from (w,x,y,z)=(Q1,Q2,Q3,Q4)       # scalar-first
+  rot,tilt,psi = relion_euler.matrix2angles(R_pn)             # no mirror
+  coords: ix=x/apix, iy=y/apix, iz=z/apix                     # no flip
 
 Run:
   micromamba activate pro-revelio
@@ -31,7 +31,6 @@ TRAIN = f"{DS}/train_dir_6"
 MOTIF = f"{DS}/simulation_dir_6/motif_lists"
 ROOT  = f"{DS}/relion_sta"
 SIM, APIX = 6, 10.0
-M = np.diag([1., 1., -1.])
 
 # species short-name -> motif-list Code
 CODES = {
@@ -49,7 +48,7 @@ def tomo(i, subdir):
 
 def gt_angles(row):
     Rpn = Rotation.from_quat([row.Q2, row.Q3, row.Q4, row.Q1]).as_matrix()   # (w,x,y,z)->xyzw
-    return matrix2angles(M @ Rpn @ M)
+    return matrix2angles(Rpn)                                                 # no z-flip -> no mirror
 
 def write_wedge(path, box):
     c = box // 2; k, i, j = np.mgrid[0:box, 0:box, 0:box]
@@ -62,25 +61,35 @@ def main():
     ap.add_argument("--tomos", nargs="+", default=["all"])
     ap.add_argument("--box", type=int, default=64)
     ap.add_argument("--angles", choices=["gt", "zero"], default="gt")
-    ap.add_argument("--variant", choices=["basic", "faket"], default="basic",
-                    help="basic = plain-noise tomos (relion_sta); faket = style-transfer tomos (relion_sta_faket)")
+    ap.add_argument("--variant", choices=["basic", "faket", "clean"], default="basic",
+                    help="basic = plain-noise tomos; faket = style-transfer tomos; "
+                         "clean = noiseless PolNet density (tomo_den, ground-truth reference)")
     ap.add_argument("--no-invert", action="store_true")
     args = ap.parse_args()
 
-    subdir = "faket_tomograms" if args.variant == "faket" else "basic_tomograms"
-    root = f"{DS}/relion_sta_faket" if args.variant == "faket" else f"{DS}/relion_sta"
+    if args.variant == "clean":
+        root = f"{DS}/relion_sta_clean"
+        cleanp = lambda i: f"{DS}/simulation_dir_6/tomos/tomo_den_{i}.mrc"
+        tomo_path = lambda i: cleanp(i) if os.path.exists(cleanp(i)) else None
+        list_glob = f"{DS}/simulation_dir_6/tomos/tomo_den_*.mrc"
+        idx_of = lambda p: int(os.path.basename(p).split("_")[-1].split(".")[0])
+    else:
+        subdir = "faket_tomograms" if args.variant == "faket" else "basic_tomograms"
+        root = f"{DS}/relion_sta_faket" if args.variant == "faket" else f"{DS}/relion_sta"
+        tomo_path = lambda i: tomo(i, subdir)
+        list_glob = f"{TRAIN}/{subdir}/tomogram_{SIM}_*"
+        idx_of = lambda p: int(os.path.basename(p).split("_")[-1])
 
     species = list(CODES) if args.species == ["all"] else args.species
     for s in species:
         assert s in CODES, f"unknown species {s}; choose from {list(CODES)}"
     if args.tomos == ["all"]:
-        idxs = sorted(int(os.path.basename(p).split("_")[-1])
-                      for p in glob.glob(f"{TRAIN}/{subdir}/tomogram_{SIM}_*"))
+        idxs = sorted(idx_of(p) for p in glob.glob(list_glob))
     else:
         idxs = [int(t) for t in args.tomos]
 
     box, H = args.box, args.box // 2
-    invert = not args.no_invert
+    invert = (not args.no_invert) and args.variant != "clean"  # clean density already protein-bright
     rows = {s: [] for s in species}       # per species: list of (img, ctf, mic, cx,cy,cz, rot,tilt,psi, grp, subset)
     refs = {s: (np.zeros((box,box,box), np.float64), 0) for s in species}
     for s in species:
@@ -88,7 +97,7 @@ def main():
         write_wedge(f"{root}/{s}/wedge_ctf.mrc", box)
 
     for gi, i in enumerate(idxs):
-        tp = tomo(i, subdir)
+        tp = tomo_path(i)
         mf = f"{MOTIF}/tomo_motif_list_{i}.csv"
         if not tp or not os.path.exists(mf):
             print(f"[tomo {i}] missing, skip"); continue
@@ -100,7 +109,7 @@ def main():
             os.makedirs(f"{root}/{s}/Subtomograms/tomogram_{SIM}_{i}", exist_ok=True)
             kept = 0
             for j, row in enumerate(sub_df.itertuples(index=False)):
-                ix, iy, iz = int(round(row.X/APIX)), int(round(row.Y/APIX)), int(round(nz-1-row.Z/APIX))
+                ix, iy, iz = int(round(row.X/APIX)), int(round(row.Y/APIX)), int(round(row.Z/APIX))
                 if ix-H<0 or ix+H>nx or iy-H<0 or iy+H>ny or iz-H<0 or iz+H>nz: continue
                 b = vol[iz-H:iz+H, iy-H:iy+H, ix-H:ix+H].astype(np.float32)
                 b = (b - b.mean())/(b.std()+1e-9)
@@ -144,7 +153,7 @@ def write_run_script(s, box):
     with open(f"{ROOT}/{s}/run_refine3d.sh", "w") as f:
         f.write(f"""#!/bin/bash
 # RELION 4.0 3D auto-refine of {s}. Run from this dir. (wrap in sbatch for real runs)
-export PATH=/user/muth9/u12095/software/relion/install/bin:$PATH
+module load gcc/13.2.0 openmpi/5.0.7 relion/4.0.1 2>/dev/null || true
 cd "$(dirname "$0")"; mkdir -p Refine3D
 relion_refine --i particles.star --o Refine3D/run \\
   --ref initial_ref.mrc --ini_high 50 \\

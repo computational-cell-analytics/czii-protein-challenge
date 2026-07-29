@@ -7,6 +7,10 @@ detection_scripts/evaluation/results/
 classificationscripts/evaluation/results/
 _debug_augmented_examples/
 
+# STA generated outputs
+STA/results/
+STA/slurm_logs/
+
 # Ignore all .log files
 *.log
 
@@ -14,6 +18,3 @@ _debug_augmented_examples/
 .env
 
 *.egg-info/
-
-#ignore files
-czii-protein-challenge/STA/8Apx_tmp.star

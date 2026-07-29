@@ -6,7 +6,12 @@
 #   bash run_all.sh refine basic   # de-novo auto-refine (GPU+MPI)
 MODE=${1:-gt}; VARIANT=${2:-basic}
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-for SP in ribosome vlp beta-galactosidase thyroglobulin apo-ferritin beta-amylase albumin; do
+if [ "$VARIANT" = experimental ]; then
+  SPECIES="ribosome virus-like-particle beta-galactosidase thyroglobulin apo-ferritin beta-amylase"
+else
+  SPECIES="ribosome vlp beta-galactosidase thyroglobulin apo-ferritin beta-amylase albumin"
+fi
+for SP in $SPECIES; do
   echo "======== $SP  ($MODE, $VARIANT) ========"
   if [ "$MODE" = gt ]; then bash "$ROOT/run_gt_average.sh" "$VARIANT" "$SP"
   else bash "$ROOT/run_refine3d.sh" "$VARIANT" "$SP"; fi

@@ -13,7 +13,7 @@ case "$VARIANT" in
   faket) PROJ=$DATASET/relion_sta_faket ;;
   *) echo "variant must be 'basic' or 'faket'"; exit 1 ;;
 esac
-export PATH=/user/muth9/u12095/software/relion/install/bin:$PATH
+source "$(cd "$(dirname "$0")" && pwd)/env.sh"
 declare -A DIAM=( [vlp]=320 [ribosome]=300 [beta-galactosidase]=180 [thyroglobulin]=250 \
                   [apo-ferritin]=130 [beta-amylase]=130 [albumin]=100 )
 D=${DIAM[$SP]:-300}
