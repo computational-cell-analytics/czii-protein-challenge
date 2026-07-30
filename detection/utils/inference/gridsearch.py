@@ -6,12 +6,17 @@ import json
 import os
 from skimage.feature import blob_log, peak_local_max
 from ..evaluation.evaluation_metrics import metric_coords
-from ..prediction.prediction import get_prediction_torch_em
+from ..prediction.prediction import get_prediction_torch_em, load_detection_model
 from ..training.tiling_helper import parse_tiling
 from detection.data_processing.create_heatmap import parse_json_files
 import numpy as np
 
-from detection.config import ADJ_FACTOR, CZII_SMALLEST_PROTEIN_SIZE
+from detection.config import (
+    ADJ_FACTOR,
+    CZII_SMALLEST_PROTEIN_SIZE,
+    GRIDSEARCH_BETA,
+    GRIDSEARCH_THRESH_RANGE,
+)
 
 #TODO Do I want to make this more flexible??
 TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
@@ -127,7 +132,9 @@ def get_full_label_path(json_val_path, val_path):
 def gridsearch(json_val_path, model_path):
     print("starting grid search")
 
-    threshes = np.arange(1.0, 2.5, 0.1)
+    threshes = np.arange(*GRIDSEARCH_THRESH_RANGE)
+    min_thresh = float(threshes.min())
+    min_distance = int(CZII_SMALLEST_PROTEIN_SIZE * ADJ_FACTOR)
     data = []
 
     # Load JSON from the file
@@ -136,6 +143,9 @@ def gridsearch(json_val_path, model_path):
 
     # Extract the 'val' list
     val_list = json_data["val"]
+
+    # Load the model once and reuse it for every validation tomogram.
+    model = load_detection_model(model_path)
 
     for val_path in val_list:
 
@@ -146,7 +156,7 @@ def gridsearch(json_val_path, model_path):
         tiling = parse_tiling(tile_shape=None, halo=None) #TODO implement tiling and halo choices
 
         input_volume = get_volume(image_path)
-        pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model_path=model_path, verbose=True)[0]
+        pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model=model, verbose=True)[0]
 
         json_files = [
             os.path.join(label_path, f)
@@ -155,36 +165,36 @@ def gridsearch(json_val_path, model_path):
         ]
         label_coords, _ = parse_json_files(json_files)
 
+        # peak_local_max is expensive, so run it once at the lowest threshold. Raising
+        # threshold_abs only removes peaks below it (it never revives peaks that were
+        # suppressed by a stronger neighbour), so the peaks for any higher threshold are
+        # exactly the subset of these peaks whose intensity clears that threshold.
+        all_peaks = peak_local_max(pred, min_distance=min_distance, threshold_abs=min_thresh)
+        peak_vals = pred[tuple(all_peaks.T)] if len(all_peaks) else np.empty(0)
+
         for thresh in tqdm(threshes):
-
-            adj_factor = ADJ_FACTOR
-
-            pred_coords = peak_local_max(pred, min_distance=int(CZII_SMALLEST_PROTEIN_SIZE*adj_factor * 1), threshold_abs=thresh)
+            pred_coords = all_peaks[peak_vals >= thresh] if len(all_peaks) else all_peaks
             precision, recall, f1, _, _, _ = metric_coords(label_coords, pred_coords)
 
-            data.append([f1, precision, recall, thresh])
-            print(f"f1, precision, recall and corresponding thresholds: {data}")
+            data.append([val_path, thresh, f1, precision, recall])
 
-        #Alternative using list conprehension
-        '''
-        adj_factor = ADJ_FACTOR     
-        data.extend([
-        [metric_coords(label_coords, blob_log(pred, min_sigma=CZII_SMALLEST_PROTEIN_SIZE * adj_factor * 0.9, 
-                                            max_sigma=109.02 * adj_factor * 1.1, 
-                                            threshold=thresh))[2], thresh]
-        for thresh in tqdm(threshes)
-        ])'''
+    df = pandas.DataFrame(data=data, columns=["val_path", "Threshold", "f1", "precision", "recall"])
 
-    df = pandas.DataFrame(data=data, columns=["f1", "precision", "recall", "Threshold"])
-    # F_beta with beta=0.5 weights precision ~4x relative to recall in the harmonic mean,
-    # favouring fewer false positives while still rewarding reasonable recall.
-    beta = 0.5
-    df["f_beta"] = (
-        (1 + beta**2) * df["precision"] * df["recall"]
-        / (beta**2 * df["precision"] + df["recall"] + 1e-8)
+    # Aggregate over the whole validation set: average precision/recall per threshold.
+    # (Previously idxmax picked a single (tomogram, threshold) row, i.e. the threshold
+    # that happened to work best on the easiest single tomogram, not across the val set.)
+    agg = df.groupby("Threshold", as_index=False)[["precision", "recall"]].mean()
+
+    # F_beta with beta < 1 favours precision (fewer false positives / less oversampling).
+    beta = GRIDSEARCH_BETA
+    agg["f_beta"] = (
+        (1 + beta**2) * agg["precision"] * agg["recall"]
+        / (beta**2 * agg["precision"] + agg["recall"] + 1e-8)
     )
-    best_thresh = df.loc[df["f_beta"].idxmax(), "Threshold"]
+    best_thresh = float(agg.loc[agg["f_beta"].idxmax(), "Threshold"])
 
+    print(f"per-threshold val averages (beta={beta}):")
+    print(agg.to_string(index=False))
     print(f"The best threshold according to the val set {val_list} is {best_thresh}")
 
     return best_thresh

@@ -1,1 +1,1 @@
-from .prediction import get_prediction_torch_em
+from .prediction import get_prediction_torch_em, load_detection_model

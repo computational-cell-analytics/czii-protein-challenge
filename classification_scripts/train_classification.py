@@ -9,7 +9,7 @@ from torch_em.classification.classification_logger import ClassificationLogger
 from classification.utils.training import ProteinClassificationTrainer
 from classification.training import get_paths
 from classification.utils import classification_training, ClassificationMetric, ClassificationDataset
-from classification.utils.training import FocalLossWithLabelSmoothing
+from classification.utils.training import FocalLossWithLabelSmoothing, BalancedSoftmaxLoss
 from classification.config import MAX_EXTENT_HALO
 
 #All data together
@@ -38,12 +38,41 @@ def get_normalization():
     )
 
 
-def train(testset=True, model_name="protein_classification"):
+def build_loss(loss_name, n_classes):
+    """Construct the training loss from a short name.
+
+    "focal"    -> FocalLossWithLabelSmoothing (inverse-frequency alpha, sqrt-tempered)
+    "balanced_softmax" -> BalancedSoftmaxLoss (logit adjustment, tau=1.0)
+    "ce"       -> plain CrossEntropyLoss
+    """
+    if loss_name == "focal":
+        return FocalLossWithLabelSmoothing(
+            num_classes=n_classes,
+            gamma=2.0,
+            alpha="balanced",  # inverse-frequency weights, computed from the training data
+            alpha_beta=0.3,    # sqrt-tempered: gentler than full inverse-frequency (beta=1)
+            label_smoothing=0.1,
+        )
+    if loss_name == "balanced_softmax":
+        # Class-frequency prior is filled in from the training targets at runtime.
+        # tau=1.0 is standard Balanced Softmax; lower tau tempers the correction.
+        return BalancedSoftmaxLoss(
+            num_classes=n_classes,
+            tau=1.0,
+            prior="balanced",
+            label_smoothing=0.1,
+        )
+    if loss_name == "ce":
+        return torch.nn.CrossEntropyLoss()
+    raise ValueError(f"Unknown loss '{loss_name}'. Choose from: focal, balanced_softmax, ce.")
+
+
+def train(testset=True, model_name="protein_classification", loss_name="focal"):
     #variables
-    model_name = "protein_classification_czii_v66"
+    model_name = "protein_classification_czii_v71"
     in_channels = 1
     n_classes = 7
-    datasets = ["ExperimentRuns"]
+    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3"]
     # Limit tomograms per dataset. Set to None to use all, a single int for a uniform
     # limit, or a dict for per-dataset control, e.g.:
     # N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl2": 5, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl2": 3} or
@@ -87,13 +116,8 @@ def train(testset=True, model_name="protein_classification"):
     print(f"Using bounding box size (with halo {halo}): {max_extent+halo}")
     patch_shape = (max_extent+halo, max_extent+halo, max_extent+halo)
     
-    focal_loss = FocalLossWithLabelSmoothing(
-        num_classes=n_classes,
-        gamma=2.0,
-        alpha="balanced",  # inverse-frequency weights, computed from the training data
-        alpha_beta=0.3,    # sqrt-tempered: gentler than full inverse-frequency (beta=1)
-        label_smoothing=0.1,
-    )
+    loss = build_loss(loss_name, n_classes)
+    print(f"Using loss: {loss_name} ({type(loss).__name__})")
 
     print(f"Training model {model_name}")
     
@@ -112,7 +136,7 @@ def train(testset=True, model_name="protein_classification"):
         n_iterations=2e3,
         out_channels=n_classes,
         in_channels=in_channels,
-        loss=focal_loss, #torch.nn.CrossEntropyLoss(),#focal_loss,
+        loss=loss,
         metric=ClassificationMetric(),
         augmentations=get_augmentation(),
         normalization=get_normalization(), #get_normalization(), None
@@ -129,9 +153,13 @@ def train(testset=True, model_name="protein_classification"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--testset", action='store_false', help="Set to False if no testset should be created")
+    parser.add_argument(
+        "-l", "--loss", default="focal", choices=["focal", "balanced_softmax", "ce"],
+        help="Training loss: focal (default), balanced_softmax, or ce.",
+    )
     args = parser.parse_args()
 
-    train(args.testset)
+    train(args.testset, loss_name=args.loss)
 
 
 if __name__ == "__main__":

@@ -6,9 +6,13 @@ from tqdm import tqdm
 import numpy as np
 import json
 
-from detection.utils.prediction.prediction import get_prediction_torch_em
+from detection.utils.prediction.prediction import get_prediction_torch_em, load_detection_model
 from detection.utils.inference.protein_detection import protein_detection
 from detection.utils.training.tiling_helper import parse_tiling
+
+# Filename used to cache the gridsearch threshold inside the output folder so that
+# re-runs / restarts do not recompute it.
+THRESHOLD_CACHE_NAME = "_detection_threshold.json"
 
 
 def get_non_zarr(input_path):
@@ -91,14 +95,40 @@ def get_volume(input_path: str) -> np.ndarray:
     return volume
 
 
-def run_protein_detection(input_path, output_path, model_path, json_val_path, threshold=None):
+def _load_cached_threshold(output_path, model_path, json_val_path):
+    """Return a previously computed threshold if it matches this model/val split, else None."""
+    cache_file = os.path.join(output_path, THRESHOLD_CACHE_NAME)
+    if not os.path.exists(cache_file):
+        return None
+    try:
+        with open(cache_file, "r") as f:
+            cache = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+    if cache.get("model_path") == model_path and cache.get("json_val_path") == json_val_path:
+        print(f"Reusing cached threshold {cache['threshold']} from {cache_file}")
+        return cache["threshold"]
+    return None
+
+
+def _save_cached_threshold(output_path, model_path, json_val_path, threshold):
+    os.makedirs(output_path, exist_ok=True)
+    cache_file = os.path.join(output_path, THRESHOLD_CACHE_NAME)
+    with open(cache_file, "w") as f:
+        json.dump(
+            {"model_path": model_path, "json_val_path": json_val_path, "threshold": threshold},
+            f, indent=4,
+        )
+
+
+def run_protein_detection(input_path, output_path, model_path, json_val_path, threshold=None, model=None):
 
     tiling = parse_tiling(tile_shape=None, halo=None) #TODO implement tiling and halo choices
     print(f"using tiling {tiling}")
 
     input_volume = get_volume(input_path)
 
-    pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model_path=model_path, verbose=True)
+    pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model_path=model_path, model=model, verbose=True)
     print(f"using the validation set listed in {json_val_path}")
     detections, threshold = protein_detection(pred, json_val_path, model_path, threshold=threshold)
 
@@ -128,7 +158,11 @@ def process_folder(args):
     input_files = [os.path.join(args.input_path, name) for name in os.listdir(args.input_path)
                    if os.path.isdir(os.path.join(args.input_path, name))]
 
-    threshold = None  # start with None, first run computes it
+    # Load the model once and reuse it for every tomogram in the folder.
+    model = load_detection_model(args.model_path)
+
+    # Reuse a cached threshold if available; otherwise the first run computes it.
+    threshold = _load_cached_threshold(args.output_path, args.model_path, args.json_val_path)
 
     pbar = tqdm(input_files, desc="Run protein detection")
     for input_path in pbar:
@@ -141,8 +175,10 @@ def process_folder(args):
             continue
 
         threshold = run_protein_detection(
-            input_path, args.output_path, args.model_path, args.json_val_path, threshold=threshold
+            input_path, args.output_path, args.model_path, args.json_val_path,
+            threshold=threshold, model=model,
         )
+        _save_cached_threshold(args.output_path, args.model_path, args.json_val_path, threshold)
 
 
 def main():

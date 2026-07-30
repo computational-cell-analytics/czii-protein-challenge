@@ -5,6 +5,7 @@ import h5py
 import zarr
 from tqdm import tqdm
 import numpy as np
+import torch
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,7 +15,23 @@ from classification.training import load_peaks, get_volume
 from classification.data_processing import extract_subtomograms
 from classification.utils import protein_classification
 
-#TODO update this script if needed
+
+def _resolve_max_extent_and_halo(model_path, fallback_max_extent):
+    """Match run_protein_classification.py: extract cut-outs with the SAME geometry
+    the model was trained/evaluated with -- max_extent = patch_shape[0] from the
+    checkpoint and halo=0 (no resize). Falls back to --max_extent only if the
+    checkpoint has no patch_shape.
+    """
+    ckpt_path = model_path if model_path.endswith("best.pt") else os.path.join(model_path, "best.pt")
+    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    patch_shape = checkpoint.get("init", {}).get("patch_shape")
+    if patch_shape is not None:
+        max_extent = patch_shape[0]
+        print(f"Using max_extent={max_extent} from checkpoint patch_shape, halo=0 "
+              f"(matching run_protein_classification.py).")
+        return max_extent, 0
+    print(f"patch_shape not in checkpoint; falling back to --max_extent={fallback_max_extent}, halo=0.")
+    return fallback_max_extent, 0
 
 
 def run_protein_classification(input_paths, output_path: str, model_path: str, batch_size: int = 16):
@@ -79,7 +96,7 @@ def run_protein_classification(input_paths, output_path: str, model_path: str, b
     plt.close()
 
 
-def preprocess_tomo(input_tomo: str, detection_folder: str, max_extent: int, subtomo_output: str):
+def preprocess_tomo(input_tomo: str, detection_folder: str, max_extent: int, subtomo_output: str, halo: int = 0):
     experiment_name = os.path.basename(input_tomo)
 
     peaks_path = os.path.join(detection_folder, f"{experiment_name}_protein_detections.json")
@@ -87,7 +104,9 @@ def preprocess_tomo(input_tomo: str, detection_folder: str, max_extent: int, sub
 
     raw_volume = get_volume(input_tomo)
 
-    subtomograms, valid_coords = extract_subtomograms(raw_volume, coords, max_extent)
+    # halo=0 to match run_protein_classification.py (which extracts max_extent=patch_shape[0]
+    # with halo=0 and no resize). The old default halo=4 silently changed the cube size.
+    subtomograms, valid_coords = extract_subtomograms(raw_volume, coords, max_extent, halo=halo)
 
     file_paths = []
     os.makedirs(subtomo_output, exist_ok=True)
@@ -114,10 +133,14 @@ def process_folder(args):
         ]'''
         input_tomograms = [args.input_path]
 
+        # Derive the cut-out geometry from the checkpoint so it matches training /
+        # run_protein_classification.py (max_extent = patch_shape[0], halo=0, no resize).
+        max_extent, halo = _resolve_max_extent_and_halo(args.model_path, args.max_extent)
+
         input_files = []
         for input_tomo in input_tomograms:
             paths = preprocess_tomo(
-                input_tomo, args.detection, args.max_extent, args.subtomo_output
+                input_tomo, args.detection, max_extent, args.subtomo_output, halo=halo
             )
             input_files.extend(paths)  # Flatten list
     else:
@@ -155,7 +178,9 @@ def main():
     )
     parser.add_argument(
         "--max_extent", type=int,
-        help="Size of the bbox that was used during training"
+        help="Fallback bbox size, used ONLY if the checkpoint has no patch_shape. Normally "
+             "max_extent is read from the checkpoint (= patch_shape[0]) so it matches training "
+             "and run_protein_classification.py; extraction always uses halo=0 and no resize."
     )
     parser.add_argument(
         "--subtomo_output", "-sub_o", type=str,

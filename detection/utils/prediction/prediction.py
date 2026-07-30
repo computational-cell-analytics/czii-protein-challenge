@@ -11,10 +11,40 @@ from torch_em.util.prediction import predict_with_halo
 from detection.utils.training.detection_dataset import robust_standardize
 
 
+def load_detection_model(model_path: str, device: str = None):
+    """
+    Load a detection model from a torch_em checkpoint directory or a serialized
+    pytorch model. Loading is expensive, so callers that predict on many volumes
+    (folder processing, gridsearch) should load once and reuse the returned model.
+    """
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    if model_path.endswith("best.pt"):
+        model_path = os.path.split(model_path)[0]
+
+    # Suppress warning when loading the model.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+
+        if os.path.isdir(model_path):  # Load the model from torch_em checkpoint
+            import sys
+            import detection.utils as det_utils
+
+            sys.modules['utils'] = det_utils
+
+            model = torch_em.util.load_model(checkpoint=model_path, device=device)
+        else:  # Load the model directly from a serialized pytorch model.
+            model = torch.load(model_path)
+
+    return model
+
+
 def get_prediction_torch_em(
     input_volume: np.ndarray,  # [z, y, x]
     tiling: Dict[str, Dict[str, int]],  # {"tile": {"z": int, ...}, "halo": {"z": int, ...}}
     model_path: str = None,
+    model=None,
     verbose: bool = True,
 ) -> np.ndarray:
     """
@@ -23,6 +53,7 @@ def get_prediction_torch_em(
     Args:
         input_volume: The input volume to predict on.
         model_path: The path to the model checkpoint if 'model' is not provided.
+        model: An already-loaded model. If given, model_path is ignored for loading.
         tiling: The tiling configuration for the prediction.
         verbose: Whether to print timing information.
 
@@ -31,9 +62,6 @@ def get_prediction_torch_em(
     """
     if verbose:
         print("Predicting protein location in volume of shape", input_volume.shape)
-
-    if model_path.endswith("best.pt"):
-        model_path = os.path.split(model_path)[0]
 
     print(f"tiling {tiling}")
     # Create updated_tiling with the same structure
@@ -53,19 +81,8 @@ def get_prediction_torch_em(
     t0 = time.time()
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Suppress warning when loading the model.
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-
-        if os.path.isdir(model_path):  # Load the model from torch_em checkpoint
-            import sys
-            import detection.utils as det_utils
-
-            sys.modules['utils'] = det_utils
-
-            model = torch_em.util.load_model(checkpoint=model_path, device=device)
-        else:  # Load the model directly from a serialized pytorch model.
-            model = torch.load(model_path)
+    if model is None:
+        model = load_detection_model(model_path, device=device)
 
     # Run prediction with the model.
     with torch.no_grad():

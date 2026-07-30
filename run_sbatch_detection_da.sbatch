@@ -1,6 +1,6 @@
 #! /bin/bash
 #SBATCH -c 4
-#SBATCH --mem 256G
+#SBATCH --mem 64G
 #SBATCH -p grete:shared
 #SBATCH -t 3:00:00
 #SBATCH -G A100:1
@@ -11,8 +11,9 @@
 # ExperimentRuns tomograms (no labels used; teacher/student consistency only).
 # To run semi-supervised instead, add:
 #   --label_root /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/ExperimentRuns
-/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-net/bin/python \
+/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/pro-revelio/bin/python \
  /user/muth9/u12095/czii-protein-challenge/detection_scripts/train_detection_domain_adaptation.py \
- -n protein_detection_da_v34_ExperimentRuns \
+ -n protein_detection_da_v37_ExperimentRuns_conf08 \
  -i /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/ExperimentRuns \
- -m /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models/checkpoints/protein_detection_czii_v34
+ -m /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models/checkpoints/protein_detection_czii_v37 \
+ --confidence_threshold 0.8

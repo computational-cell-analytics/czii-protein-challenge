@@ -11,7 +11,7 @@ from .trainer import ProteinClassificationTrainer
 from .data_loader import create_data_loader
 from .classification_dataset import ClassificationDataset
 from .trainer import default_classification_trainer
-from .loss import FocalLossWithLabelSmoothing
+from .loss import FocalLossWithLabelSmoothing, BalancedSoftmaxLoss
 
 from torch_em.model.resnet3d import resnet3d_18
 import torch.nn as nn
@@ -161,6 +161,15 @@ def classification_training(
         )
         print(f"[FocalLoss] train class counts (by index): {counts.tolist()}")
         print(f"[FocalLoss] inverse-frequency alpha:       {alpha.tolist()}")
+
+    # Balanced Softmax needs the training class frequencies as its log-prior.
+    if isinstance(loss, BalancedSoftmaxLoss) and loss.needs_prior:
+        train_set = train_loader.dataset
+        counts, prior = loss.set_prior_from_targets(
+            train_set.targets, label_to_index=train_set.label_to_index
+        )
+        print(f"[BalancedSoftmax] train class counts (by index): {counts.tolist()}")
+        print(f"[BalancedSoftmax] class-frequency prior:         {prior.tolist()}")
 
     trainer = default_classification_trainer(
         name=name,
