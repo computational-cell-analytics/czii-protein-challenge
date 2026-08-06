@@ -1,0 +1,32 @@
+name: pro-revelio
+display_name: Pro-Revelio
+
+contributions:
+  commands:
+    - id: pro-revelio.get_reader
+      title: Open cryo-ET volume (HDF5 / MRC / TIFF / Zarr)
+      python_name: pro_revelio_napari.reader:napari_get_reader
+    - id: pro-revelio.volume_viewer
+      title: 3D Volume Viewer
+      python_name: pro_revelio_napari.widget:VolumeViewerWidget
+
+  readers:
+    - command: pro-revelio.get_reader
+      accepts_directories: true
+      filename_patterns:
+        - "*.h5"
+        - "*.hdf5"
+        - "*.hdf"
+        - "*.mrc"
+        - "*.mrcs"
+        - "*.rec"
+        - "*.map"
+        - "*.st"
+        - "*.ali"
+        - "*.tif"
+        - "*.tiff"
+        - "*.zarr"
+
+  widgets:
+    - command: pro-revelio.volume_viewer
+      display_name: 3D Volume Viewer
