@@ -304,9 +304,7 @@ class VolumeViewerWidget(QWidget):
     #
 
     def _image_layers(self):
-        from napari.layers import Image
-
-        return [layer for layer in self._viewer.layers if isinstance(layer, Image)]
+        return image_layers(self._viewer)
 
     def _targets(self):
         name = self._layer_combo.currentText()
@@ -452,6 +450,12 @@ class VolumeViewerWidget(QWidget):
     def _reset_view(self):
         self._viewer.reset_view()
         self._sync_angles()
+
+
+def image_layers(viewer):
+    from napari.layers import Image
+
+    return [layer for layer in viewer.layers if isinstance(layer, Image)]
 
 
 def _base_z(layer):

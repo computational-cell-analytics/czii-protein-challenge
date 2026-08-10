@@ -9,6 +9,9 @@ contributions:
     - id: pro-revelio.volume_viewer
       title: 3D Volume Viewer
       python_name: pro_revelio_napari.widget:VolumeViewerWidget
+    - id: pro-revelio.map_compare
+      title: Compare Maps
+      python_name: pro_revelio_napari.compare_widget:MapCompareWidget
 
   readers:
     - command: pro-revelio.get_reader
@@ -30,3 +33,5 @@ contributions:
   widgets:
     - command: pro-revelio.volume_viewer
       display_name: 3D Volume Viewer
+    - command: pro-revelio.map_compare
+      display_name: Compare Maps

@@ -52,6 +52,34 @@ This modular setup allows detection and classification to be trained, evaluated,
   camera rotation. Every control can target one layer or all image layers at once.
 - The panel also has its own drop area and file/folder browser.
 
+### Comparing two maps
+
+**Plugins → Pro-Revelio → Compare Maps** overlays two maps of the same box size and shows where they
+agree and where they don't. It follows the ChimeraX workflow:
+
+| Panel option | ChimeraX equivalent |
+|---|---|
+| *Surface coloured by difference* — map A's isosurface, blue↔white↔red by signed A−B | `color sample #1 map #3 palette blue-white-red` |
+| *Difference volume* — A−B as a diverging image layer | `volume subtract #1 #2 minRMS true` |
+| *Agreement overlay* — labels for shared / A-only / B-only above a threshold | two-level difference surfaces |
+| CC, RMS and Dice in the result box | `measure correlation #1 #2` |
+| *Align map B onto map A* | `fitmap #1 inMap #2` (translation only) |
+
+Two preprocessing steps are on by default because the comparison is misleading without them:
+
+- **Match RMS** puts the maps on a common amplitude scale. This is ChimeraX's `minRMS true`; without
+  it a subtraction mostly shows that one map's contrast is higher.
+- **Match band-limit** low-passes the sharper map to the blunter one's resolution. Comparing a 50 Å
+  low-passed map against an unfiltered one otherwise produces a difference map made almost entirely
+  of frequencies the first map simply does not contain.
+
+From the command line, `python -m pro_revelio_napari.compare A.mrc B.mrc` opens both maps with the
+panel already set up. For a resolution-resolved comparison use `STA/compare_fsc.py --map-a --map-b`,
+which reports the full FSC curve; the panel deliberately does not duplicate it.
+
+The panel needs both maps on the same grid — it does not regrid, and it does not search for a
+rotation.
+
 Details worth knowing:
 
 - Volumes above 256 MB are loaded lazily (dask over the file), so opening a large tomogram is instant

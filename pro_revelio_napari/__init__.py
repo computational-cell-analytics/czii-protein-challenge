@@ -1,6 +1,5 @@
-"""napari plugin for viewing cryo-ET volumes (HDF5, MRC/MRCS, TIFF, Zarr) in 3D."""
+"""napari plugin for viewing and comparing cryo-ET volumes (HDF5, MRC/MRCS, TIFF, Zarr) in 3D.
 
-from .reader import napari_get_reader
-from .widget import VolumeViewerWidget
-
-__all__ = ["napari_get_reader", "VolumeViewerWidget"]
+Nothing is imported here on purpose: npe2 resolves the contributions by their full module path, and
+an eager import would pull Qt in on plugin discovery.
+"""
