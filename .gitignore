@@ -4,12 +4,12 @@
 assisting_files/
 __pycache__/
 detection_scripts/evaluation/results/
-classificationscripts/evaluation/results/
+classification_scripts/evaluation/results/
 _debug_augmented_examples/
 
 # STA generated outputs
 STA/results/
-STA/slurm_logs/
+*/slurm_logs/
 
 # Ignore all .log files
 *.log
