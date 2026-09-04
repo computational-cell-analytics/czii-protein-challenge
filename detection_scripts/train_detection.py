@@ -59,9 +59,9 @@ find_zarr_or_mrc = find_tomogram
 
 def train(key, ignore_label=None, training_2D=False, testset=True, extension="zarr", save_max_extent=True):
 
-    datasets = ["ExperimentRuns"]
-    synthetic_dataset = ["ExperimentRuns"] #used to save the max_extent information for the classification later
-    model_name = "protein_detection_czii_v39"
+    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3"]
+    synthetic_dataset = ["ExperimentRuns_faket_dens1_5_distr_eqCl3"] #used to save the max_extent information for the classification later
+    model_name = "protein_detection_czii_v41"
 
     print(f"Training model {model_name}")
 
@@ -89,7 +89,7 @@ def train(key, ignore_label=None, training_2D=False, testset=True, extension="za
     print(len(train_paths), "tomograms for training")
     print(len(val_paths), "tomograms for validation")
 
-    patch_shape = [128, 256, 256]
+    patch_shape = [48, 256, 256]
 
     batch_size = 2
     check = False
