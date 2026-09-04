@@ -28,6 +28,47 @@ def _split_file_name(ds: str, limit: Optional[int]) -> str:
     return f"split-{ds}" + (f"-n{limit}" if limit is not None else "") + ".json"
 
 
+def reuse_split(source_root: str, output_root: str) -> List[str]:
+    """Copy split-*.json from a previous run so a new run gets the identical tomogram split.
+
+    `get_paths` otherwise draws a fresh random split per output dir, which would put a
+    previous run's test tomograms into this run's training set.
+    """
+    import shutil
+
+    if not os.path.isdir(source_root):
+        raise FileNotFoundError(f"No split source directory: {source_root}")
+
+    copied = []
+    for name in sorted(os.listdir(source_root)):
+        if name.startswith("split-") and name.endswith(".json"):
+            target = os.path.join(output_root, name)
+            if not os.path.exists(target):
+                shutil.copy(os.path.join(source_root, name), target)
+            copied.append(name)
+
+    if not copied:
+        raise FileNotFoundError(f"No split-*.json found in {source_root}")
+    print(f"Reusing split from {source_root}: {copied}")
+    return copied
+
+
+def require_free_checkpoint(save_root: str, name: str, overwrite: bool = False) -> None:
+    """Abort if a finished checkpoint of this name exists, so a rerun cannot clobber it."""
+    checkpoint = os.path.join(save_root, "checkpoints", name, "best.pt")
+    if os.path.exists(checkpoint) and not overwrite:
+        raise SystemExit(
+            f"Refusing to start: {checkpoint} already exists.\n"
+            "Pick a new --name, or pass --overwrite to replace it."
+        )
+
+
+def require_free_file(path: str, overwrite: bool = False) -> None:
+    """Abort if an output file exists, so a rerun cannot clobber it."""
+    if os.path.exists(path) and not overwrite:
+        raise SystemExit(f"Refusing to start: {path} already exists.\nPass --overwrite to replace it.")
+
+
 def _resolve_limit(ds: str, n_tomograms: Optional[Union[int, Dict[str, int]]]) -> Optional[int]:
     if n_tomograms is None:
         return None
