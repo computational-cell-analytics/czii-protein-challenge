@@ -7,7 +7,7 @@ import json
 from torch_em.classification.classification_logger import ClassificationLogger
 
 from classification.utils.training import ProteinClassificationTrainer
-from classification.training import get_paths
+from classification.training import get_paths, require_free_checkpoint, reuse_split
 from classification.utils import classification_training, ClassificationMetric, ClassificationDataset
 from classification.utils.training import FocalLossWithLabelSmoothing, BalancedSoftmaxLoss
 from classification.config import MAX_EXTENT_HALO
@@ -17,6 +17,7 @@ TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
 TARGET_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/" #"/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth"
 
 OUTPUT_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training"
+SAVE_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models"
 
 
 def get_augmentation():
@@ -67,21 +68,35 @@ def build_loss(loss_name, n_classes):
     raise ValueError(f"Unknown loss '{loss_name}'. Choose from: focal, balanced_softmax, ce.")
 
 
-def train(testset=True, model_name="protein_classification", loss_name="focal"):
+def train(
+    testset=True,
+    model_name="protein_classification",
+    loss_name="focal",
+    pretrained_encoder=None,
+    pretrained_use_teacher=False,
+    encoder_lr_scale=1.0,
+    split_from=None,
+    overwrite=False,
+):
     #variables
-    model_name = "protein_classification_czii_v71"
+    if model_name in (None, "protein_classification"):
+        model_name = "protein_classification_czii_v80"
     in_channels = 1
     n_classes = 7
-    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3"]
+    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3", "ExperimentRuns_basicNoise_dens1_5_distr_eqCl3"] 
     # Limit tomograms per dataset. Set to None to use all, a single int for a uniform
     # limit, or a dict for per-dataset control, e.g.:
     # N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl2": 5, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl2": 3} or
-    N_TOMOGRAMS = None
+    N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl3": 25} 
     #N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_faket_dens1_5_distr_eqCl2": 25}
 
 
+    require_free_checkpoint(SAVE_ROOT, model_name, overwrite)
+
     output_path = os.path.join(OUTPUT_ROOT, model_name)
     os.makedirs(output_path, exist_ok=True)
+    if split_from:
+        reuse_split(split_from, output_path)
 
     train_paths = get_paths("train", datasets, TRAIN_ROOT, output_path, testset=testset, n_tomograms=N_TOMOGRAMS)
     val_paths = get_paths("val", datasets, TRAIN_ROOT, output_path, testset=testset, n_tomograms=N_TOMOGRAMS)
@@ -119,8 +134,12 @@ def train(testset=True, model_name="protein_classification", loss_name="focal"):
     loss = build_loss(loss_name, n_classes)
     print(f"Using loss: {loss_name} ({type(loss).__name__})")
 
+    if pretrained_encoder:
+        print(f"Fine-tuning from contrastive encoder: {pretrained_encoder} "
+              f"({'teacher' if pretrained_use_teacher else 'online'} weights, lr scale {encoder_lr_scale})")
+
     print(f"Training model {model_name}")
-    
+
     idx_to_label = classification_training(
         name=model_name,
         train_paths=train_paths,
@@ -133,16 +152,19 @@ def train(testset=True, model_name="protein_classification", loss_name="focal"):
         lr=1e-4,
         logger=ClassificationLogger,
         trainer_class=ProteinClassificationTrainer,
-        n_iterations=2e3,
+        n_iterations=8e3,
         out_channels=n_classes,
         in_channels=in_channels,
         loss=loss,
         metric=ClassificationMetric(),
         augmentations=get_augmentation(),
         normalization=get_normalization(), #get_normalization(), None
-        save_root="/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models",
+        save_root=SAVE_ROOT,
         dataset_class=ClassificationDataset,
         num_workers=8, #TODO maybe can go bigger here
+        pretrained_encoder=pretrained_encoder,
+        pretrained_use_teacher=pretrained_use_teacher,
+        encoder_lr_scale=encoder_lr_scale,
     )
 
     mapping_file = os.path.join(output_path, "idx_to_label.json")
@@ -157,9 +179,37 @@ def main():
         "-l", "--loss", default="focal", choices=["focal", "balanced_softmax", "ce"],
         help="Training loss: focal (default), balanced_softmax, or ce.",
     )
+    parser.add_argument("-n", "--name", default=None, help="Checkpoint name (defaults to the one set in train()).")
+    parser.add_argument(
+        "-p", "--pretrained-encoder", default=None,
+        help="Checkpoint folder of a contrastively pretrained encoder (see pretrain_contrastive.py).",
+    )
+    parser.add_argument(
+        "--pretrained-use-teacher", action="store_true",
+        help="Initialize from the EMA teacher instead of the online encoder.",
+    )
+    parser.add_argument(
+        "--encoder-lr-scale", type=float, default=1.0,
+        help="LR multiplier for the pretrained backbone relative to the classification head.",
+    )
+    parser.add_argument(
+        "--split-from", default=None,
+        help="Training output dir of a previous run whose split-*.json to reuse, so runs are "
+             "compared on identical train/val/test tomograms.",
+    )
+    parser.add_argument("--overwrite", action="store_true", help="Allow replacing an existing checkpoint.")
     args = parser.parse_args()
 
-    train(args.testset, loss_name=args.loss)
+    train(
+        args.testset,
+        model_name=args.name,
+        loss_name=args.loss,
+        pretrained_encoder=args.pretrained_encoder,
+        pretrained_use_teacher=args.pretrained_use_teacher,
+        encoder_lr_scale=args.encoder_lr_scale,
+        split_from=args.split_from,
+        overwrite=args.overwrite,
+    )
 
 
 if __name__ == "__main__":

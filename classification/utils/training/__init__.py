@@ -6,3 +6,13 @@ from .normalization import CryoETNormalize
 from .loss import FocalLossWithLabelSmoothing, BalancedSoftmaxLoss
 from .trainer import default_classification_trainer, ProteinClassificationTrainer
 from .domain_adaptation import mean_teacher_adaptation as mean_teacher_adaptation_classification
+from .noise_augmentation import NoiseAwareViewAugment, FixedNoiseTransform, snr_positive_weight
+from .contrastive_dataset import ContrastivePairDataset, SingleViewDataset
+from .contrastive import (
+    ContrastiveEncoder,
+    MoCoContrastiveTrainer,
+    NoiseAwareInfoNCE,
+    contrastive_pretraining,
+    extract_backbone_state_dict,
+    load_pretrained_backbone,
+)

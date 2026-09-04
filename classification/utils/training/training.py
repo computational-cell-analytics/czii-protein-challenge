@@ -86,6 +86,9 @@ def classification_training(
     n_samples_train: Optional[int] = None,
     n_samples_val: Optional[int] = None,
     dataset_class=ClassificationDataset,
+    pretrained_encoder: Optional[str] = None,
+    pretrained_use_teacher: bool = False,
+    encoder_lr_scale: float = 1.0,
     **kwargs,
 ):
     """Set up and run a classification training workflow.
@@ -111,6 +114,12 @@ def classification_training(
         n_samples_train: Optional limit for training samples.
         n_samples_val: Optional limit for validation samples.
         dataset_class: Dataset wrapper class.
+        pretrained_encoder: Checkpoint of a contrastively pretrained encoder to initialize
+            the ResNet backbone from (see `classification.utils.training.contrastive`).
+        pretrained_use_teacher: Take the EMA teacher weights from that checkpoint.
+        encoder_lr_scale: Learning-rate multiplier for the pretrained backbone relative to the
+            (randomly initialized) classification head. Below 1 preserves the pretrained
+            features during fine-tuning.
         kwargs: Additional args for trainer.
     """
     
@@ -142,6 +151,10 @@ def classification_training(
         return
 
     model = get_3d_model(EfficientNet=False, in_channels=in_channels, out_channels=out_channels)
+
+    if pretrained_encoder is not None:
+        from .contrastive import load_pretrained_backbone
+        model = load_pretrained_backbone(model, pretrained_encoder, prefer_teacher=pretrained_use_teacher)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -187,6 +200,7 @@ def classification_training(
         trainer_class=trainer_class,
         patch_shape=patch_shape,
         idx_to_label=idx_to_label,
+        encoder_lr_scale=encoder_lr_scale,
         **kwargs,
     )
     

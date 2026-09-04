@@ -87,6 +87,7 @@ def default_classification_trainer(
     rank: Optional[int] = None,
     patch_shape: Optional[Tuple[int, int, int]] = None,
     idx_to_label: Optional[Dict[int, str]] = None,
+    encoder_lr_scale: float = 1.0,
 ):
     """Get a trainer for a classification network.
 
@@ -114,11 +115,20 @@ def default_classification_trainer(
         save_root: The root folder for saving the checkpoint and logs.
         compile_model: Whether to compile the model before training.
         rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+        encoder_lr_scale: Learning-rate multiplier for the backbone (everything but `fc`).
+            Use < 1 when fine-tuning a contrastively pretrained encoder.
 
     Returns:
         The trainer.
     """
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, **optimizer_kwargs)
+    if encoder_lr_scale != 1.0:
+        head = [p for n, p in model.named_parameters() if n.startswith("fc.")]
+        backbone = [p for n, p in model.named_parameters() if not n.startswith("fc.")]
+        params = [{"params": backbone, "lr": learning_rate * encoder_lr_scale}, {"params": head, "lr": learning_rate}]
+        print(f"Fine-tuning with backbone lr={learning_rate * encoder_lr_scale:g}, head lr={learning_rate:g}")
+    else:
+        params = model.parameters()
+    optimizer = torch.optim.AdamW(params, lr=learning_rate, **optimizer_kwargs)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)
 
     loss = DiceLoss() if loss is None else loss
