@@ -10,5 +10,6 @@
 #/scratch/usr/nimsmuth/mambaforge/envs/synapse-net
 #/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/synapse-net
 #/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/pro-revelio/bin/python
-/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/pro-revelio/bin/python /user/muth9/u12095/czii-protein-challenge/classification_scripts/train_classification.py --loss balanced_softmax \
-    --split-from /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v62 -n protein_classification_czii_v81
+/mnt/vast-nhr/home/muth9/u12095/micromamba/envs/pro-revelio/bin/python /user/muth9/u12095/czii-protein-challenge/classification_scripts/train_classification.py \
+ --loss balanced_softmax -n protein_classification_czii_v89 \
+ --split-from /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/training/protein_classification_czii_v88

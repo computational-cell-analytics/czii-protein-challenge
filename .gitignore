@@ -18,3 +18,4 @@ STA/results/
 .env
 
 *.egg-info/
+detection_scripts/evaluation/results_offset_applied_in_eval/

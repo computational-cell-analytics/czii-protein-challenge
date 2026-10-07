@@ -13,6 +13,6 @@
 #   --label_root /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/ExperimentRuns
 /mnt/vast-nhr/home/muth9/u12095/micromamba/envs/pro-revelio/bin/python \
  /user/muth9/u12095/czii-protein-challenge/detection_scripts/train_detection_domain_adaptation.py \
- -n protein_detection_da_v41_ExperimentRuns \
+ -n protein_detection_da_v44_ExperimentRuns \
  -i /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/ExperimentRuns \
- -m /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models/checkpoints/protein_detection_czii_v41
+ -m /mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/models/checkpoints/protein_detection_czii_v44
