@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import torch
 import torch_em
@@ -14,6 +14,14 @@ from ..transform import HeatmapFlowTransform
 from detection.config import FLOW_SIGMA
 
 class CombinedLoss(nn.Module):
+    """
+    Heatmap MSE + flow MSE.
+
+    If the target carries a 6th channel it is a per-voxel weight map (see
+    CZII_CLASS_LOSS_WEIGHTS) and the heatmap term becomes a weighted MSE, so a particle's
+    contribution no longer scales with its size. A 5-channel target falls back to plain MSE,
+    so old label transforms keep working.
+    """
     def __init__(self, heatmap_weight=1.0, flow_weight=0.1):
         super().__init__()
         self.heatmap_loss = nn.MSELoss()
@@ -22,15 +30,29 @@ class CombinedLoss(nn.Module):
         self.flow_weight = flow_weight
 
     def forward(self, pred, target):
-        # split channels: (1 heatmap + 4 flow)
-        pred_heatmap, pred_flow = pred[:, :1], pred[:, 1:]
-        target_heatmap, target_flow = target[:, :1], target[:, 1:]
+        # split channels: (1 heatmap + 4 flow [+ 1 weight])
+        pred_heatmap, pred_flow = pred[:, :1], pred[:, 1:5]
+        target_heatmap, target_flow = target[:, :1], target[:, 1:5]
 
-        l_h = self.heatmap_loss(pred_heatmap, target_heatmap)
+        if target.shape[1] > 5:
+            w = target[:, 5:6]
+            l_h = (w * (pred_heatmap - target_heatmap) ** 2).mean()
+        else:
+            l_h = self.heatmap_loss(pred_heatmap, target_heatmap)
         l_f = self.flow_loss(pred_flow, target_flow)
 
         total_loss = self.heatmap_weight * l_h + self.flow_weight * l_f
         return total_loss
+
+
+class PredictionChannelsMSE(nn.Module):
+    """Plain MSE over the predicted channels only, ignoring any trailing weight channel."""
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss(reduction="mean")
+
+    def forward(self, pred, target):
+        return self.mse(pred, target[:, :pred.shape[1]])
 
 
 def get_3d_model(
@@ -91,6 +113,8 @@ def supervised_training(
     sampler=None,
     loss_fn=CombinedLoss(heatmap_weight=1.0, flow_weight=0.1),
     final_activation: Optional[str] = None,
+    scheduler_kwargs: Optional[Dict[str, Any]] = None,
+    weighted_heatmap_loss: bool = True,
     **loader_kwargs,
 ):
     """
@@ -114,6 +138,7 @@ def supervised_training(
         save_root: Folder where the checkpoint will be saved.
         n_samples_train: The number of samples for the training dataset.
         n_samples_val: The number of samples for the validation dataset.
+        scheduler_kwargs: Overrides torch_em's ReduceLROnPlateau defaults.
         dataset_class: The dataset class to use. By default `DetectionDataset`, which creates a detection
             heatmap and flow for the CZII Cryo Challenge data, is used.
         sampler: The sampler for rejecting invalid batches. Not used by default.
@@ -143,6 +168,7 @@ def supervised_training(
             lower_bound=lower_bound,
             upper_bound=upper_bound,
             flow_sigma=FLOW_SIGMA,
+            with_weights=weighted_heatmap_loss,
         )
 
     num_workers = loader_kwargs.pop("num_workers", 4 * batch_size)
@@ -164,6 +190,11 @@ def supervised_training(
                                                      n_samples_train=n_samples_train,
                                                      n_samples_val=n_samples_val,
                                                      sampler=sampler)
+    iters_per_epoch = len(train_loader)
+    print(f"{len(train_loader.dataset)} train samples per epoch ({iters_per_epoch} iterations, "
+          f"{int(n_iterations) // iters_per_epoch} epochs), "
+          f"{len(val_loader.dataset)} val samples ({len(val_loader)} batches)")
+
     if check:
         from torch_em.util.debug import check_loader
         check_loader(train_loader, n_samples=4)
@@ -172,7 +203,7 @@ def supervised_training(
 
     in_channels = 1  # get_in_channels(train_images[0])
     model = get_3d_model(in_channels=in_channels, out_channels=out_channels, final_activation=final_activation)
-    metric = nn.MSELoss(reduction="mean")
+    metric = PredictionChannelsMSE()
 
     trainer = torch_em.default_segmentation_trainer(
         name=name,
@@ -186,6 +217,7 @@ def supervised_training(
         save_root=save_root,
         loss=loss_fn,
         metric=metric,
+        **({} if scheduler_kwargs is None else {"scheduler_kwargs": scheduler_kwargs}),
     )
 
     trainer.fit(n_iterations)

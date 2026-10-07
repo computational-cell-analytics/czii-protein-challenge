@@ -6,7 +6,10 @@ import argparse
 import os
 import zarr
 
-from detection.config import ADJ_FACTOR
+from detection.config import (
+    ADJ_FACTOR, CZII_PARTICLE_RADII_A, VOXEL_SIZE_A,
+    CZII_CLASS_LOSS_WEIGHTS, BACKGROUND_LOSS_WEIGHT,
+)
 
 def width_to_sigma(width, eps, lower_bound, upper_bound):
     # shrink needs to be between 0 and 1
@@ -18,7 +21,9 @@ def width_to_sigma(width, eps, lower_bound, upper_bound):
         elif sigma > upper_bound:
             sigma = upper_bound
 
-    return int(sigma)
+    # Round, don't truncate: int() cost the smallest proteins most of their width
+    # (beta-amylase 1.88 -> 1), and the loss a stamp contributes scales with sigma**3.
+    return int(round(sigma))
 
 
 def create_gaussian_stamp(width, eps, lower_bound, upper_bound):
@@ -49,6 +54,19 @@ def create_gaussian_stamp(width, eps, lower_bound, upper_bound):
     return stamp
     
 
+def resolve_picks_folder(tomogram_label_path):
+    """
+    Return the folder holding a tomogram's pick JSONs.
+
+    The real CZII data nests them in a "Picks" subfolder, the simulated datasets put them
+    directly in the tomogram folder.
+    """
+    picks_path = os.path.join(tomogram_label_path, "Picks")
+    if os.path.isdir(picks_path):
+        return picks_path
+    return tomogram_label_path
+
+
 def parse_json_files(json_files):
     """
     Parse multiple JSON files to extract coordinates and protein names.
@@ -73,7 +91,7 @@ def parse_json_files(json_files):
                 y = location.get("y")
                 z = location.get("z")
                 if x is not None and y is not None and z is not None:
-                    coordinates.append((z / 10, y / 10, x / 10))  # Scale coordinates as needed
+                    coordinates.append((z / VOXEL_SIZE_A, y / VOXEL_SIZE_A, x / VOXEL_SIZE_A))
                     protein_types.append(data.get("pickable_object_name", "unknown"))
 
     return coordinates, protein_types
@@ -123,11 +141,43 @@ def save_max_extent_to_json(TRAIN_ROOT, synthetic_dataset):
         print(f"Saved max_width*{adj_factor} = {width_info} to {info_file_path}")
 
 
+# Gaussian stamp width per class, in voxels, measured as the extent of the polnet template
+# above its MMER_ISO (simulation/polnet-synaptic/data/default/templates/mrcs_10A/*.mrc).
+# The template is what the model actually sees, so it -- not the CZII scoring radius -- is the
+# right reference: the CZII radii are a scoring tolerance and disagree with the templates
+# (e.g. beta-amylase is the 1fa2 monomer, 9.3 voxels, against a CZII radius implying 13).
+#
+# These reproduce create_width_dict()*ADJ_FACTOR for beta-amylase (9), beta-galactosidase (17),
+# thyroglobulin (21/22) and ribosome (32). They correct apo-ferritin (was 23, template 16) and
+# virus-like-particle (was 23, template 36), which shared an identical 79.07 in width_dict.
+# Re-derive if the templates or the .pns MMER_ISO values change.
+CZII_STAMP_WIDTH_VOXELS = {
+    "apo-ferritin": 16,
+    "beta-amylase": 9,
+    "beta-galactosidase": 17,
+    "ribosome": 32,
+    "thyroglobulin": 21,
+    "virus-like-particle": 36,
+}
+
+
+def create_stamp_width_dict():
+    """
+    Gaussian stamp width per class, in voxels.
+
+    Separate from create_width_dict(), which is left alone because save_max_extent_to_json
+    uses it to set the classification crop size.
+    """
+    return dict(CZII_STAMP_WIDTH_VOXELS)
+
+
 def precompute_gaussians(width_dict, eps, lower_bound, upper_bound):
-    return {protein: create_gaussian_stamp(int(width * 0.3), eps, lower_bound, upper_bound) for protein, width in width_dict.items()}
+    """width_dict maps class -> stamp width in voxels."""
+    return {protein: create_gaussian_stamp(int(round(width)), eps, lower_bound, upper_bound)
+            for protein, width in width_dict.items()}
 
 
-def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_bound=None, upper_bound=None, bb=None):
+def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_bound=None, upper_bound=None, bb=None, with_weights=False):
     """
     Process a tomogram by creating a heatmap based on protein data from JSON files,
     with optional bounding box constraints.
@@ -140,9 +190,11 @@ def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_boun
         lower_bound (float, optional): Minimum allowed sigma.
         upper_bound (float, optional): Maximum allowed sigma.
         bb (tuple, optional): Bounding box (z_min, z_max, y_min, y_max, x_min, x_max).
+        with_weights (bool): also return a per-voxel loss weight map (see
+            CZII_CLASS_LOSS_WEIGHTS) so a particle's contribution does not scale with its size.
 
     Returns:
-        np.ndarray: Generated 3D heatmap.
+        np.ndarray: Generated 3D heatmap, or (heatmap, weights) if with_weights.
     """
     json_files = [
         os.path.join(root, f)
@@ -151,8 +203,7 @@ def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_boun
         if f.endswith(".json") and f not in ("no_class.json", "albumin.json", "actin.json", "mt.json")
     ]
     coordinates, protein_types = parse_json_files(json_files)
-    width_dict = create_width_dict()
-    gaussian_dict = precompute_gaussians(width_dict, eps, lower_bound, upper_bound)
+    gaussian_dict = precompute_gaussians(create_stamp_width_dict(), eps, lower_bound, upper_bound)
     
     if bb:
         (z_min, z_max), (y_min, y_max), (x_min, x_max) = [(s.start, s.stop) for s in bb]
@@ -160,9 +211,17 @@ def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_boun
         heatmap = np.zeros(restricted_shape)
     else:
         heatmap = np.zeros(image_shape)
-    
+
+    # Start at 0 = 'no particle here yet'. Taking the max against the background weight
+    # directly would swallow any class whose weight is below it (ribosome, VLP, ...),
+    # so the background is filled in at the end instead.
+    weights = np.zeros(heatmap.shape) if with_weights else None
+
     for coord, protein in zip(coordinates, protein_types):
-        z, y, x = map(int, coord)
+        # Round, don't truncate: the Gaussian stamp can only sit on a voxel, so put it on the
+        # nearest one. int() floors, which biased every heatmap peak by -0.5 voxel per axis
+        # relative to the pick - and relative to the flow target, which uses the exact float.
+        z, y, x = (int(round(c)) for c in coord)
         gaussian = gaussian_dict.get(protein, create_gaussian_stamp(1, eps, lower_bound, upper_bound))
         
         if bb and not (z_min <= z < z_max and y_min <= y < y_max and x_min <= x < x_max):
@@ -178,27 +237,39 @@ def create_heatmap(json_folder, image_shape, eps=0.00001, sigma=None, lower_boun
         x_min_hm = max(0, x - gaussian.shape[2] // 2)
         x_max_hm = min(heatmap.shape[2], x + gaussian.shape[2] // 2 + 1)
         
-        heatmap[z_min_hm:z_max_hm, y_min_hm:y_max_hm, x_min_hm:x_max_hm] = np.maximum(
-            heatmap[z_min_hm:z_max_hm, y_min_hm:y_max_hm, x_min_hm:x_max_hm],
-            gaussian[
-                (z_min_hm - (z - gaussian.shape[0] // 2)):(z_max_hm - (z - gaussian.shape[0] // 2)),
-                (y_min_hm - (y - gaussian.shape[1] // 2)):(y_max_hm - (y - gaussian.shape[1] // 2)),
-                (x_min_hm - (x - gaussian.shape[2] // 2)):(x_max_hm - (x - gaussian.shape[2] // 2))
-            ]
-        )
-    
+        region = np.s_[z_min_hm:z_max_hm, y_min_hm:y_max_hm, x_min_hm:x_max_hm]
+        stamp = gaussian[
+            (z_min_hm - (z - gaussian.shape[0] // 2)):(z_max_hm - (z - gaussian.shape[0] // 2)),
+            (y_min_hm - (y - gaussian.shape[1] // 2)):(y_max_hm - (y - gaussian.shape[1] // 2)),
+            (x_min_hm - (x - gaussian.shape[2] // 2)):(x_max_hm - (x - gaussian.shape[2] // 2))
+        ]
+        heatmap[region] = np.maximum(heatmap[region], stamp)
+
+        if weights is not None:
+            # Only where this particle actually has signal; max where stamps overlap.
+            np.maximum(weights[region], CZII_CLASS_LOSS_WEIGHTS.get(protein, 1.0),
+                       out=weights[region], where=stamp > 0)
+
+    if with_weights:
+        weights[weights == 0] = BACKGROUND_LOSS_WEIGHT
+        return heatmap, weights
     return heatmap
 
 
-def get_label(json_folder, image_shape, eps=0.00001, sigma=None, lower_bound=None, upper_bound=None, bb=None):
+def get_label(json_folder, image_shape, eps=0.00001, sigma=None, lower_bound=None, upper_bound=None, bb=None,
+              with_weights=False):
 
     have_single_file = isinstance(json_folder, str)
 
     if have_single_file:
-        return create_heatmap(json_folder, image_shape, eps, sigma, lower_bound, upper_bound, bb)
-    else:
-        print(f"len json folder {len(json_folder)}")
-        return np.stack([create_heatmap(p, image_shape, eps, sigma, lower_bound, upper_bound, bb) for p in json_folder])
+        return create_heatmap(json_folder, image_shape, eps, sigma, lower_bound, upper_bound, bb, with_weights)
+
+    print(f"len json folder {len(json_folder)}")
+    out = [create_heatmap(p, image_shape, eps, sigma, lower_bound, upper_bound, bb, with_weights)
+           for p in json_folder]
+    if with_weights:
+        return np.stack([h for h, _ in out]), np.stack([w for _, w in out])
+    return np.stack(out)
 
 
 def get_tomo_shape(zarr_folder):

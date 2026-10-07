@@ -1,7 +1,31 @@
 import os
+import shutil
 from glob import glob
 import json
 from sklearn.model_selection import train_test_split
+
+
+def reuse_split(source_root, output_root):
+    """Copy split-*.json from a previous run so a new run gets the identical tomogram split.
+
+    `_require_*_split` otherwise draws a fresh unseeded split per output dir, which would put
+    a previous run's test tomograms into this run's training set.
+    """
+    if not os.path.isdir(source_root):
+        raise FileNotFoundError(f"No split source directory: {source_root}")
+
+    copied = []
+    for name in sorted(os.listdir(source_root)):
+        if name.startswith("split-") and name.endswith(".json"):
+            target = os.path.join(output_root, name)
+            if not os.path.exists(target):
+                shutil.copy(os.path.join(source_root, name), target)
+            copied.append(name)
+
+    if not copied:
+        raise FileNotFoundError(f"No split-*.json found in {source_root}")
+    print(f"Reusing split from {source_root}: {copied}")
+    return copied
 
 
 def _require_train_val_test_split(datasets, train_root, output_root, extension):

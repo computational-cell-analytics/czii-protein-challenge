@@ -1,4 +1,6 @@
 import os
+from math import ceil
+
 import numpy as np
 from typing import List, Union, Tuple, Optional, Any, Callable
 
@@ -27,7 +29,7 @@ class DetectionDataset(torch.utils.data.Dataset):
         if patch_shape is None:
             return 1
         else:
-            n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
+            n_samples = ceil(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
             return n_samples
 
     def __init__(
@@ -120,8 +122,14 @@ class DetectionDataset(torch.utils.data.Dataset):
         else:
             bb_start = []
             for sh, psh in zip(self.shape, self.sample_shape):
-                max_start = max(0, sh - psh - 2 * self.halo)  # reserve space for halo on both sides
-                start = np.random.randint(0, max_start + 1) if max_start > 0 else 0
+                # Keep the halo inside the volume on *both* sides. Reserving 2*halo while still
+                # starting at 0 biased the window to low indices: patches with start < halo lost
+                # the missing context to the halo crop and were zero-padded back to patch_shape,
+                # and the last 2*halo voxels of every axis were never inside an inner patch.
+                room = max(0, sh - psh)
+                lo = min(self.halo, room // 2)
+                hi = max(lo, room - self.halo)
+                start = np.random.randint(lo, hi + 1) if hi > lo else lo
                 bb_start.append(start)
             patch_shape_for_bb = self.sample_shape
 

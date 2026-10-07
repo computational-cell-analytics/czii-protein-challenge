@@ -119,8 +119,8 @@ class HeatmapTransform:
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
 
-    def __call__(self, label_path, shape, bb_labels, bb_for_loading=None):
-        heatmap = get_label(
+    def __call__(self, label_path, shape, bb_labels, bb_for_loading=None, with_weights=False):
+        out = get_label(
             label_path,
             shape,
             eps=self.eps,
@@ -128,8 +128,12 @@ class HeatmapTransform:
             lower_bound=self.lower_bound,
             upper_bound=self.upper_bound,
             bb=bb_labels,
+            with_weights=with_weights,
         )
-        return np.asarray(heatmap, dtype=np.float32)
+        if with_weights:
+            heatmap, weights = out
+            return np.asarray(heatmap, dtype=np.float32), np.asarray(weights, dtype=np.float32)
+        return np.asarray(out, dtype=np.float32)
 
 
 class FlowTransform:
@@ -179,7 +183,10 @@ class HeatmapFlowTransform:
         upper_bound,
         flow_sigma=None,
         flow_grid=(1, 1, 1),
+        with_weights=False,
     ):
+        # with_weights appends a 6th channel holding the per-voxel heatmap loss weight.
+        self.with_weights = with_weights
         self.heatmap_transform = HeatmapTransform(
             eps, sigma, lower_bound, upper_bound
         )
@@ -193,8 +200,11 @@ class HeatmapFlowTransform:
         # Heatmap: computed over the (halo-extended) bb_labels, so proteins just outside
         # the patch (within the halo) still contribute their Gaussian tails.
         heatmap = self.heatmap_transform(
-            label_path, shape, bb_labels
+            label_path, shape, bb_labels, with_weights=self.with_weights
         )
+        weights = None
+        if self.with_weights:
+            heatmap, weights = heatmap
 
         patch_spatial_shape = heatmap.shape[-3:]
 
@@ -212,6 +222,10 @@ class HeatmapFlowTransform:
         heatmap_channel = heatmap[np.newaxis, ...].astype(np.float32, copy=False)
 
         # Combine
-        labels = np.concatenate([heatmap_channel, flow], axis=0) # (1+4, Z, Y, X)
+        channels = [heatmap_channel, flow]
+        if weights is not None:
+            channels.append(weights[np.newaxis, ...].astype(np.float32, copy=False))
+
+        labels = np.concatenate(channels, axis=0)  # (1+4, Z, Y, X), or (1+4+1, ...) with weights
 
         return labels
