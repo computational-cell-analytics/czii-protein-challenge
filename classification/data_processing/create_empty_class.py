@@ -283,8 +283,8 @@ def process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=50):
 
 
 if __name__ == "__main__":
-    tomo_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/ExperimentRuns_faket_dens1_5_distr_eqCl3"
-    gt_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/ExperimentRuns_faket_dens1_5_distr_eqCl3"
+    tomo_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/ExperimentRuns_faket_dens1_5_eqCl4"
+    gt_root = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/ground_truth/structure_for_detection/ExperimentRuns_faket_dens1_5_eqCl4"
 
     # Set zarr_=True if your data is in .zarr format
     process_all_tomograms(tomo_root, gt_root, zarr_=False, n_points=150)

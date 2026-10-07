@@ -51,7 +51,7 @@ def build_loss(loss_name, n_classes):
             num_classes=n_classes,
             gamma=2.0,
             alpha="balanced",  # inverse-frequency weights, computed from the training data
-            alpha_beta=0.3,    # sqrt-tempered: gentler than full inverse-frequency (beta=1)
+            alpha_beta=1.0,    # sqrt-tempered: gentler than full inverse-frequency (beta=1)
             label_smoothing=0.1,
         )
     if loss_name == "balanced_softmax":
@@ -83,11 +83,11 @@ def train(
         model_name = "protein_classification_czii_v80"
     in_channels = 1
     n_classes = 7
-    datasets = ["ExperimentRuns_faket_dens1_5_distr_eqCl3", "ExperimentRuns_basicNoise_dens1_5_distr_eqCl3"] 
+    datasets = ["ExperimentRuns_faket_dens1_5_eqCl4", "ExperimentRuns_basicNoise_dens1_5_eqCl4"] 
     # Limit tomograms per dataset. Set to None to use all, a single int for a uniform
     # limit, or a dict for per-dataset control, e.g.:
     # N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl2": 5, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl2": 3} or
-    N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_basicNoise_dens1_5_distr_eqCl3": 25} 
+    N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_eqCl4": 25, "ExperimentRuns_basicNoise_dens1_5_eqCl4": 25} 
     #N_TOMOGRAMS = {"ExperimentRuns_faket_dens1_5_distr_eqCl3": 25, "ExperimentRuns_faket_dens1_5_distr_eqCl2": 25}
 
 

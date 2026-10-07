@@ -322,7 +322,8 @@ def get_coords_and_targets(paths: List[str], target_root: str) -> Tuple[List[Lis
             os.path.join(root, f)
             for root, _, files in os.walk(json_folder)
             for f in files
-            if f.endswith(".json") and f not in ("albumin.json") and f not in ("actin.json") and f not in ("mt.json")
+            # NB: no_class.json is deliberately kept - no_class is a trained class.
+            if f.endswith(".json") and f not in ("albumin.json", "actin.json", "mt.json")
         ]
         print(f"json_files {json_files}")
         coords, protein_types = parse_json_files(json_files)

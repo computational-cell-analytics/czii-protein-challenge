@@ -7,10 +7,10 @@ import json
 from typing import List, Tuple, Optional
 from collections import defaultdict, deque
 from scipy.spatial.distance import cdist
-from scipy.optimize import linear_sum_assignment
 
 from classification.data_processing import extract_subtomograms
 from classification.training import get_coords_and_targets
+from detection.utils.evaluation.evaluation_metrics import hungarian_match
 
 
 def load_detection_predictions(pred_path):
@@ -107,41 +107,23 @@ def get_volume(input_path: str, zarr_: bool = None) -> np.ndarray:
     return volume
 
 
-def match_predictions_to_labels(preds, gts, match_distance=45):
+def match_predictions_to_labels(preds, gts, match_distance=None, gt_classes=None):
     """
     Match predicted coordinates to ground-truth coordinates using Hungarian algorithm.
-    
+
     Args:
-        preds: np.ndarray of shape (M, D) - predicted coordinates
-        gts: np.ndarray of shape (N, D) - ground-truth coordinates
-        match_distance: float, maximum distance to consider a match.
-    
+        preds: np.ndarray of shape (M, D) - predicted coordinates (voxels)
+        gts: np.ndarray of shape (N, D) - ground-truth coordinates (voxels)
+        match_distance: maximum distance to consider a match; by default the CZII criterion
+            0.5 * particle radius, looked up per point from `gt_classes`.
+        gt_classes: class label per ground-truth point.
+
     Returns:
         matched_pred_idx: list of indices in preds that were matched
         matched_gt_idx: list of indices in gts that were matched
     """
-    n, m = len(gts), len(preds)
-
-    if n == 0 or m == 0:
-        return [], []
-
-    # Compute pairwise distances
-    pairwise_distances = cdist(gts, preds, metric="euclidean")
-
-    # Define costs (Hungarian finds 'minimum' cost)
-    max_distance = pairwise_distances.max() if pairwise_distances.size > 0 else 1.0
-    costs = -(pairwise_distances < match_distance).astype(float) - \
-            (max_distance - pairwise_distances) / max_distance
-
-    # Hungarian matching
-    gt_idx, pred_idx = linear_sum_assignment(costs)
-
-    # Keep only valid matches under distance threshold
-    match_mask = pairwise_distances[gt_idx, pred_idx] < match_distance
-    matched_gt_idx = gt_idx[match_mask].tolist()
-    matched_pred_idx = pred_idx[match_mask].tolist()
-
-    return matched_pred_idx, matched_gt_idx
+    gt_idx, pred_idx = hungarian_match(gts, preds, match_distance, gt_classes)
+    return pred_idx.tolist(), gt_idx.tolist()
 
 
 def match_preds_with_labels(preds, label_path, no_class_label="no_class"):
@@ -172,68 +154,32 @@ def match_preds_with_labels(preds, label_path, no_class_label="no_class"):
     real_gt_coords = label_coords[keep_mask]
     real_gt_labels = protein_types[keep_mask]
 
-    #Run matching 
-    matched_idx_pred, matched_idx_gt = match_predictions_to_labels(preds, real_gt_coords)
+    # Run matching at the CZII tolerance (0.5 * particle radius, per class), so a crop only
+    # inherits a label when the particle is actually near the centre of the crop.
+    matched_idx_pred, matched_idx_gt = match_predictions_to_labels(
+        preds, real_gt_coords, gt_classes=real_gt_labels
+    )
 
-    filter = False
-    match_distance = 45
+    #create arrays for final output
+    num_preds = len(preds)
+    assigned_labels = [no_class_label] * num_preds   # default label for all predictions
+    matched_coords = [preds[i] for i in range(num_preds)]  # keep all preds
+    matched_coords = np.round(matched_coords).astype(int)
 
-    if filter:
-        # Compute nearest GT distance for each pred
-        if len(real_gt_coords) > 0:
-            dists = cdist(preds, real_gt_coords).min(axis=1)
-        else:
-            dists = np.full(len(preds), np.inf)
+    # assign matched labels
+    for p_idx, gt_idx in zip(matched_idx_pred, matched_idx_gt):
+        assigned_labels[p_idx] = real_gt_labels[gt_idx]
 
-        dists = np.array(dists)
-
-        is_matched = np.zeros(len(preds), dtype=bool)
-        is_matched[matched_idx_pred] = True
-
-        #filter matched preds & preds with no GT within 45
-        keep_mask = is_matched | (dists >= match_distance)
-
-        preds = np.array(preds)[keep_mask]
-        dists = dists[keep_mask]
-
-        #labels: matched GT label or no_class
-        assigned_labels = np.array([no_class_label] * len(preds), dtype=object)
-
-        old_to_new = {old: new for new, old in enumerate(np.where(keep_mask)[0])}
-
-        for old_p, old_gt in zip(matched_idx_pred, matched_idx_gt):
-            if old_p in old_to_new:
-                new_p = old_to_new[old_p]
-                assigned_labels[new_p] = real_gt_labels[old_gt]
-
-        num_unmatched = np.sum(assigned_labels == no_class_label)
-
-        #integer coords
-        coords = np.round(preds).astype(int)
-
-        return coords, assigned_labels.tolist(), num_unmatched, dists.tolist()
-    
+    # distances from every pred to nearest real GT point
+    if len(real_gt_coords) > 0:
+        dists = cdist(preds, real_gt_coords).min(axis=1)
     else:
-        #create arrays for final output
-        num_preds = len(preds)
-        assigned_labels = [no_class_label] * num_preds   # default label for all predictions
-        matched_coords = [preds[i] for i in range(num_preds)]  # keep all preds
-        matched_coords = np.round(matched_coords).astype(int)
+        dists = np.full(num_preds, np.inf)
 
-        # assign matched labels
-        for p_idx, gt_idx in zip(matched_idx_pred, matched_idx_gt):
-            assigned_labels[p_idx] = real_gt_labels[gt_idx]
+    #Count predictions that were not matched
+    num_unmatched_true = sum(1 for lbl in assigned_labels if lbl == no_class_label)
 
-        # distances from every pred to nearest real GT point
-        if len(real_gt_coords) > 0:
-            dists = cdist(preds, real_gt_coords).min(axis=1)
-        else:
-            dists = np.full(num_preds, np.inf)
-
-        #Count predictions that were not matched
-        num_unmatched_true = sum(1 for lbl in assigned_labels if lbl == no_class_label)
-
-        return matched_coords, assigned_labels, num_unmatched_true, dists
+    return matched_coords, assigned_labels, num_unmatched_true, dists
 
 
 def preprocess_tomo_with_predictions(
@@ -243,19 +189,19 @@ def preprocess_tomo_with_predictions(
     max_extent: int,
     subtomo_output: str,
     halo: Optional[int] = None
-) -> Tuple[List[str], List[str], int, dict]:
+) -> Tuple[List[str], List[str], dict, dict]:
     """
     Extract subtomograms at labeled coordinates and save them as .h5 files.
 
     Returns:
         file_paths: list of .h5 file paths
         labels: list of corresponding ground-truth labels (one per file)
-        num_unmatched: total count of no_class assignments (global)
+        counts: prediction bookkeeping, counted *after* the border crops are dropped
         unmatched_info: dict per tomogram
     """
     # Load predictions and match to GT (global lists)
     preds_global = load_detection_predictions(pred_path)          # shape (P,3)
-    coords_global, targets_global, num_unmatched, nearest_gt_distances = match_preds_with_labels(preds_global, label_path)
+    coords_global, targets_global, _, nearest_gt_distances = match_preds_with_labels(preds_global, label_path)
 
     # Ensure arrays
     preds_global = np.array(preds_global)
@@ -329,7 +275,20 @@ def preprocess_tomo_with_predictions(
             file_paths.append(filepath)
             labels.append(target)
 
-    return file_paths, labels, num_unmatched, unmatched_info
+    # Count on the crops that actually reach the classifier: extract_subtomograms silently
+    # drops predictions whose box would leave the volume, so the no_class count from the
+    # matching step is not the number of no_class crops.
+    unmatched_kept = sum(1 for lbl in labels if lbl == "no_class")
+    counts = {
+        "total_preds": len(preds_global),
+        "kept_crops": len(file_paths),
+        "matched_preds": len(file_paths) - unmatched_kept,
+        "unmatched_preds": unmatched_kept,
+        # exact for the single-tomogram case both callers use
+        "dropped_at_border": len(preds_global) - len(file_paths),
+    }
+
+    return file_paths, labels, counts, unmatched_info
 
 
 def preprocess_tomo_with_labels(
@@ -361,7 +320,8 @@ def preprocess_tomo_with_labels(
         else:
             subtomograms, valid_coords, targets = extract_subtomograms(raw_volume, coords, max_extent, targets=targets)
 
-        for cube, (x, y, z), target in zip(subtomograms, valid_coords, targets):
+        # valid_coords are (z, y, x), as returned by extract_subtomograms
+        for cube, (z, y, x), target in zip(subtomograms, valid_coords, targets):
             filename = f"{experiment_name}_x{x}_y{y}_z{z}.h5"
             filepath = os.path.join(subtomo_output, filename)
 

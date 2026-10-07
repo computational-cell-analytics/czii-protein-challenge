@@ -10,7 +10,7 @@ from sklearn.manifold import TSNE
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 
-from detection.utils import metric_coords
+from detection.utils import metric_coords, metric_coords_per_class, hungarian_match
 
 
 def parse_json_files(json_files):
@@ -31,21 +31,9 @@ def parse_json_files(json_files):
     return np.array(coordinates), protein_types
 
 
-def match_predictions_to_labels(preds, gts, match_distance=45.0):
-    n, m = len(gts), len(preds)
-    if n == 0 or m == 0:
-        return [], []
-
-    pairwise_distances = cdist(gts, preds, metric="euclidean")
-    max_distance = pairwise_distances.max() if pairwise_distances.size > 0 else 1.0
-    costs = -(pairwise_distances < match_distance).astype(float) - (max_distance - pairwise_distances) / max_distance
-
-    gt_idx, pred_idx = linear_sum_assignment(costs)
-    match_mask = pairwise_distances[gt_idx, pred_idx] < match_distance
-    matched_gt_idx = gt_idx[match_mask].tolist()
-    matched_pred_idx = pred_idx[match_mask].tolist()
-
-    return matched_pred_idx, matched_gt_idx
+def match_predictions_to_labels(preds, gts, match_distance=None, gt_classes=None):
+    gt_idx, pred_idx = hungarian_match(gts, preds, match_distance, gt_classes)
+    return pred_idx.tolist(), gt_idx.tolist()
 
 
 #Classification
@@ -96,37 +84,39 @@ def evaluate_per_protein_type(pred_coords, label_path, model_name, input_name):
     json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
     label_coords, protein_types = parse_json_files(json_files)
 
-    # Organize label_coords by protein type
-    label_dict = {}
-    for coord, p_type in zip(label_coords, protein_types):
-        label_dict.setdefault(p_type, []).append(coord)
+    # One global matching over all classes at once. Matching each class separately against the
+    # full prediction list would let a single prediction be a true positive for several classes.
+    per_class_metrics = metric_coords_per_class(label_coords, protein_types, pred_coords)
 
     results_folder = os.path.join(os.path.dirname(__file__), "results")
     os.makedirs(results_folder, exist_ok=True)
     csv_file = os.path.join(results_folder, f"evaluation_{model_name}.csv")
     write_header = not os.path.exists(csv_file)
 
+    # Detection is class-agnostic, so per-class precision (and f1 / dev_percentage / sMAPE / mae)
+    # is undefined; those columns are left empty, as in detection_scripts/evaluation.
     with open(csv_file, mode='a', newline='') as file:
         writer = csv.writer(file)
         if write_header:
             writer.writerow(["input_name", "protein_type", "precision", "recall", "f1",
-                             "dev_percentage", "sMAPE", "mae", "label_count", "pred_count"])
+                             "dev_percentage", "sMAPE", "mae", "matched", "label_count", "pred_count"])
 
-        for protein_type, label_coords_subset in label_dict.items():
-            precision, recall, f1, dev_percentage, sMAPE, mae = metric_coords(label_coords_subset, pred_coords)
+        for protein_type, m in per_class_metrics.items():
             writer.writerow([
-                input_name, protein_type, precision, recall, f1, dev_percentage, sMAPE, mae,
-                len(label_coords_subset), len(pred_coords)
+                input_name, protein_type, "", m["recall"], "", "", "", "",
+                m["matched"], m["label_count"], len(pred_coords)
             ])
     print(f"Per-protein detection metrics saved to {csv_file}")
 
 
 def evaluate_detection(pred_coords, label_path, model_name, input_name, evaluate_per_protein=True):
     json_files = [os.path.join(label_path, f) for f in os.listdir(label_path) if f.endswith('.json')]
-    label_coords, _ = parse_json_files(json_files)
+    label_coords, label_classes = parse_json_files(json_files)
     predictions = np.array(pred_coords)
 
-    precision, recall, f1, dev_percentage, sMAPE, mae = metric_coords(label_coords, predictions)
+    precision, recall, f1, dev_percentage, sMAPE, mae = metric_coords(
+        label_coords, predictions, gt_classes=label_classes
+    )
 
     results_folder = os.path.join(os.path.dirname(__file__), "results")
     os.makedirs(results_folder, exist_ok=True)
@@ -137,10 +127,10 @@ def evaluate_detection(pred_coords, label_path, model_name, input_name, evaluate
         writer = csv.writer(file)
         if write_header:
             writer.writerow(["input_name", "protein_type", "precision", "recall", "f1",
-                             "dev_percentage", "sMAPE", "mae", "label_count", "pred_count"])
+                             "dev_percentage", "sMAPE", "mae", "matched", "label_count", "pred_count"])
         writer.writerow([
             input_name, "all", precision, recall, f1, dev_percentage, sMAPE, mae,
-            len(label_coords), len(predictions)
+            round(recall * len(label_coords)), len(label_coords), len(predictions)
         ])
     print(f"Overall detection metrics saved to {csv_file}")
 
@@ -148,7 +138,7 @@ def evaluate_detection(pred_coords, label_path, model_name, input_name, evaluate
         evaluate_per_protein_type(predictions, label_path, model_name, input_name)
 
 
-def evaluate_dataset(ground_truth_dir, predictions_dir, output_dir, match_distance=45.0):
+def evaluate_dataset(ground_truth_dir, predictions_dir, output_dir, match_distance=None):
     os.makedirs(output_dir, exist_ok=True)
 
     classes = ["apo-ferritin", "beta-amylase", "beta-galactosidase", "ribosome", "thyroglobulin", "virus-like-particle"]
@@ -170,7 +160,9 @@ def evaluate_dataset(ground_truth_dir, predictions_dir, output_dir, match_distan
 
         evaluate_detection(pred_coords, gt_tomo_path, model_name="1_Daddies", input_name=tomo_id)
 
-        matched_pred_idx, matched_gt_idx = match_predictions_to_labels(pred_coords, gt_coords, match_distance=match_distance)
+        matched_pred_idx, matched_gt_idx = match_predictions_to_labels(
+            pred_coords, gt_coords, match_distance=match_distance, gt_classes=gt_labels
+        )
 
         # matched pairs
         for gt_i, pred_i in zip(matched_gt_idx, matched_pred_idx):
@@ -191,4 +183,4 @@ if __name__ == "__main__":
     predictions_dir = "/scratch-grete/projects/nim00007/cryo-et/challenge-data/1_Daddies"
     output_dir = "/mnt/ceph-hdd/cold/nim00007/czii/evaluation_czii_top3/1_Daddies"
 
-    evaluate_dataset(ground_truth_dir, predictions_dir, output_dir, match_distance=45.0)
+    evaluate_dataset(ground_truth_dir, predictions_dir, output_dir)

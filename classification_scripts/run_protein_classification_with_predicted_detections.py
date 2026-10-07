@@ -17,54 +17,42 @@ from classification.utils import preprocess_tomo_with_predictions
 from classification.inference.visual_checks import save_subtomo_view
 
 
+# Distance to the nearest ground-truth pick, in voxels. Resolved finely below ~8 voxels
+# because that is where the CZII tolerances sit (3.0 apo-ferritin to 7.5 ribosome).
+DISTANCE_BIN_EDGES = [1, 2, 3, 4, 5, 6, 7.5, 10, 15, 20, 30, 50]
+
+
 def summarize_distance_bins(distances):
     """
-    distances: 1D iterable of floats
-    
+    distances: 1D iterable of floats (voxels)
+
     Returns a dict with counts for fixed distance ranges.
     """
-    bins = {
-        "0-5": 0,
-        "5-10": 0,
-        "10-15": 0,
-        "15-20": 0,
-        "20-25": 0,
-        "25-30": 0,
-        "30-35": 0,
-        "35-40": 0,
-        "40-45": 0,
-        "45-50": 0,
-        ">50": 0
-    }
+    labels = ["0-1"] + [
+        f"{DISTANCE_BIN_EDGES[i - 1]:g}-{edge:g}" for i, edge in enumerate(DISTANCE_BIN_EDGES[1:], start=1)
+    ] + [f">{DISTANCE_BIN_EDGES[-1]:g}"]
+    bins = {label: 0 for label in labels}
 
     for d in distances:
-        if d < 5:
-            bins["0-5"] += 1
-        elif d < 10:
-            bins["5-10"] += 1
-        elif d < 15:
-            bins["10-15"] += 1
-        elif d < 20:
-            bins["15-20"] += 1
-        elif d < 25:
-            bins["20-25"] += 1
-        elif d < 30:
-            bins["25-30"] += 1
-        elif d < 35:
-            bins["30-35"] += 1
-        elif d < 40:
-            bins["35-40"] += 1
-        elif d < 45:
-            bins["40-45"] += 1
-        elif d < 50:
-            bins["45-50"] += 1
+        for i, edge in enumerate(DISTANCE_BIN_EDGES):
+            if d < edge:
+                bins[labels[i]] += 1
+                break
         else:
-            bins[">50"] += 1
+            bins[labels[-1]] += 1
 
     return bins
 
 
-def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label, num_unmatched, unmatched_info=None):
+SUMMARY_COLUMNS = ["total_preds", "kept_crops", "matched_preds", "unmatched_preds", "dropped_at_border"]
+
+
+def merge_counts(*counts):
+    """Sum the per-tomogram prediction counts into a global one."""
+    return {col: sum(c.get(col, 0) for c in counts) for col in SUMMARY_COLUMNS}
+
+
+def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_path, name, idx_to_label, counts, unmatched_info=None):
     # Save confusion matrix (raw counts)
     cm = confusion_matrix(truth_labels, pred_labels, labels=list(idx_to_label.values()))
     plt.figure(figsize=(8, 6))
@@ -76,13 +64,17 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     plt.savefig(os.path.join(output_path, f"confusion_matrix_{name}.png"))
     plt.close()
 
-    # Save confusion matrix (normalized: 0-1)
-    cm_norm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
+    # Save confusion matrix (row-normalized, i.e. per-class recall). Classes with no ground
+    # truth in this run have an empty row and stay at 0 instead of turning into NaN.
+    row_sums = cm.sum(axis=1, keepdims=True)
+    cm_norm = np.divide(
+        cm.astype("float"), row_sums, out=np.zeros(cm.shape, dtype=float), where=row_sums != 0
+    )
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm_norm, annot=True, fmt=".2f", xticklabels=idx_to_label.values(), yticklabels=idx_to_label.values(), cmap="Blues", vmin=0, vmax=1)
     plt.xlabel("Predicted")
     plt.ylabel("True")
-    plt.title(f"Confusion Matrix - {name}")
+    plt.title(f"Row-normalized Confusion Matrix (= recall) - {name}")
     plt.tight_layout()
     plt.savefig(os.path.join(output_path, f"confusion_matrix_normalized_{name}.png"))
     plt.close()
@@ -115,13 +107,12 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
     with open(os.path.join(output_path, f"classification_report_{name}.txt"), "w") as f:
         f.write(report)
     
-    # Write summary including unmatched predictions (= no_class)
+    # Write summary. kept_crops = matched + unmatched, and total_preds - kept_crops are the
+    # predictions whose box left the volume and never reached the classifier.
     summary_path = os.path.join(output_path, f"summary_{name}.csv")
-    write_header = not os.path.exists(summary_path)
-    with open(summary_path, "a") as f:
-        if write_header:
-            f.write("tomo_name,total_preds,matched_preds,unmatched_preds\n")
-        f.write(f"{name},{len(sample_ids)+num_unmatched},{len(sample_ids)},{num_unmatched}\n")
+    with open(summary_path, "w") as f:
+        f.write("tomo_name," + ",".join(SUMMARY_COLUMNS) + "\n")
+        f.write(f"{name}," + ",".join(str(counts[col]) for col in SUMMARY_COLUMNS) + "\n")
 
     if unmatched_info:
         # Save unmatched_info per tomogram 
@@ -151,6 +142,30 @@ def run_full_evaluation(sample_ids, truth_labels, pred_labels, probs, output_pat
             )
 
 
+VIS_SEED = 0
+
+
+def reset_visual_checks(output_path):
+    """Drop a stale example index so a re-run does not append to the previous run's rows."""
+    csv_path = os.path.join(output_path, "visual_checks", "examples_index.csv")
+    if os.path.exists(csv_path):
+        os.remove(csv_path)
+
+
+def select_visualization_indices(n_crops, n_samples, tomo_name):
+    """
+    Pick which crops of a tomogram get a rendered view.
+
+    Seeded on the tomogram name, so the sample is reproducible and independent of the order
+    the tomograms happen to be processed in. n_samples < 0 means all, 0 means none.
+    """
+    if n_samples is not None and n_samples == 0:
+        return set()
+    if n_samples is None or n_samples < 0 or n_samples >= n_crops:
+        return set(range(n_crops))
+    return set(random.Random(f"{VIS_SEED}:{tomo_name}").sample(range(n_crops), n_samples))
+
+
 def run_protein_classification_with_labels(
     input_files,
     labels,
@@ -160,21 +175,29 @@ def run_protein_classification_with_labels(
     tomo_name,
     batch_size=16,
     save_full_results=True,
-    num_unmatched=None,
-    unmatched_info=None
+    counts=None,
+    unmatched_info=None,
+    vis_samples=16
 ):
     os.makedirs(output_path, exist_ok=True)
 
     all_sample_ids, all_preds, all_probs, all_truths = [], [], [], []
+
+    # Decide upfront which crops to render, so the cubes can be held on to as they stream past
+    # instead of being re-read afterwards.
+    vis_indices = select_visualization_indices(len(input_files), vis_samples, tomo_name)
+    vis_cubes = {}
 
     # Batch processing
     for i in range(0, len(input_files), batch_size):
         batch_paths = input_files[i:i + batch_size]
         cubes, sample_ids, truths_batch = [], [], []
 
-        for path, label in zip(batch_paths, labels[i:i + batch_size]):
+        for j, (path, label) in enumerate(zip(batch_paths, labels[i:i + batch_size])):
             with h5py.File(path, "r") as f:
                 cubes.append(f["raw"][:])
+            if i + j in vis_indices:
+                vis_cubes[i + j] = cubes[-1]
             sample_ids.append(os.path.basename(path))
             truths_batch.append(label)
 
@@ -192,48 +215,38 @@ def run_protein_classification_with_labels(
 
     if save_full_results:
         # Full evaluation on all subtomograms
-        run_full_evaluation(all_sample_ids, all_truth_labels, all_pred_labels, all_probs, output_path, tomo_name, idx_to_label, num_unmatched, unmatched_info)
+        run_full_evaluation(all_sample_ids, all_truth_labels, all_pred_labels, all_probs, output_path, tomo_name, idx_to_label, counts, unmatched_info)
 
-    # set up visualization dir
-    vis_dir = os.path.join(output_path, "visual_checks")
-    os.makedirs(vis_dir, exist_ok=True)
+    # Per-sample visualization, over the sample drawn from *all* crops of this tomogram.
+    # Labels come from the already-translated lists, which are aligned with input_files.
+    if vis_cubes:
+        vis_dir = os.path.join(output_path, "visual_checks")
+        os.makedirs(vis_dir, exist_ok=True)
 
-    # per-sample visualization and csv results (do for the current batch)
-    batch_records = []
-    for sid, cube, pred_int, prob_vec, true_lbl in zip(sample_ids, cubes, preds, probs, truths_batch):
+        records = []
+        for idx in sorted(vis_cubes):
+            sid = all_sample_ids[idx]
+            top_prob = float(np.max(all_probs[idx]))
+            viz_path = os.path.join(vis_dir, f"{sid}_viz.png")
+            save_subtomo_view(
+                vis_cubes[idx], viz_path, sid,
+                all_pred_labels[idx], all_truth_labels[idx], pred_prob=top_prob,
+            )
 
-        # Decide top probability and label (if probs is vector)
-        if hasattr(prob_vec, "__len__") and len(prob_vec) > 1:
-            top_prob = float(np.max(prob_vec))
-        else:
-            top_prob = float(prob_vec) if not hasattr(prob_vec, "__len__") else float(prob_vec[0])
+            records.append({
+                "sample_id": sid,
+                "h5_path": sid,
+                "pred_label": all_pred_labels[idx],
+                "true_label": all_truth_labels[idx],
+                "prob": top_prob,
+                "visualization": viz_path
+            })
 
-        # translate pred_int to label string using idx_to_label
-        pred_label_str = idx_to_label[pred_int] if 'idx_to_label' in globals() and str(pred_int) in idx_to_label else str(pred_int)
-        true_label_str = idx_to_label[true_lbl] if 'idx_to_label' in globals() and str(true_lbl) in idx_to_label else str(true_lbl)
-
-        # sample-specific viz path
-        viz_path = os.path.join(vis_dir, f"{sid}_viz.png")
-        save_subtomo_view(cube, viz_path, sid, pred_label_str, true_label_str, pred_prob=top_prob)
-
-        batch_records.append({
-            "sample_id": sid,
-            "h5_path": sid,
-            "pred_label": pred_label_str,
-            "true_label": true_label_str,
-            "prob": top_prob,
-            "visualization": viz_path
-        })
-
-    # write/append CSV for this batch
-    csv_path = os.path.join(vis_dir, "examples_index.csv")
-    # load existing if any and append
-    if os.path.exists(csv_path):
-        df_existing = pd.read_csv(csv_path)
-        df_new = pd.DataFrame(batch_records)
-        pd.concat([df_existing, df_new], ignore_index=True).to_csv(csv_path, index=False)
-    else:
-        pd.DataFrame(batch_records).to_csv(csv_path, index=False)
+        # One block of rows per tomogram; reset_visual_checks clears the file between runs.
+        csv_path = os.path.join(vis_dir, "examples_index.csv")
+        pd.DataFrame(records).to_csv(
+            csv_path, mode="a", header=not os.path.exists(csv_path), index=False
+        )
 
     return all_sample_ids, all_truth_labels, all_pred_labels, all_probs
 
@@ -297,7 +310,8 @@ def run_multi_tomogram_mode(args):
     n_eval = max(1, int(len(tomogram_folders) * 0.1))
     eval_tomos = set(random.sample(tomogram_folders, n_eval))
 
-    global_num_unmatched = 0
+    reset_visual_checks(args.output_path)
+    global_counts = []
     global_unmatched_info = {}
 
     for subfolder_path in tomogram_folders:
@@ -306,7 +320,7 @@ def run_multi_tomogram_mode(args):
         base_folder = os.path.basename(os.path.dirname(subfolder_path))
 
         print(f"Extracting subtomograms with labels from {subfolder_path}...")
-        subtomo_files, labels, num_unmatched, unmatched_info = preprocess_tomo_with_predictions(
+        subtomo_files, labels, counts, unmatched_info = preprocess_tomo_with_predictions(
             tomo_paths,
             pred_path=os.path.join(args.pred_coords, f"{tomoID}_protein_detections.json"),
             label_path=os.path.join(args.labels_root, base_folder, tomoID, "Picks"),
@@ -327,19 +341,20 @@ def run_multi_tomogram_mode(args):
             tomo_name=tomo_name,
             batch_size=args.batch_size,
             save_full_results=(subfolder_path in eval_tomos),  # only full eval for 10% tomograms
-            num_unmatched=num_unmatched,
-            unmatched_info=None
+            counts=counts,
+            unmatched_info=None,
+            vis_samples=args.vis_samples
         )
 
         global_ids.extend(sample_ids)
         global_truths.extend(truths)
         global_preds.extend(preds)
         global_probs.extend(probs)
-        global_num_unmatched += num_unmatched
+        global_counts.append(counts)
         global_unmatched_info.update(unmatched_info)
 
     # Global evaluation
-    run_full_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, "ALL", idx_to_label, global_num_unmatched, global_unmatched_info)
+    run_full_evaluation(global_ids, global_truths, global_preds, global_probs, args.output_path, "ALL", idx_to_label, merge_counts(*global_counts), global_unmatched_info)
 
 
 def run_single_tomogram_mode(args):
@@ -386,10 +401,12 @@ def run_single_tomogram_mode(args):
         max_extent=33
         halo=None'''
 
+    reset_visual_checks(args.output_path)
+
     tomo_paths = [args.input_path]
 
     print("Extracting subtomograms with labels...")
-    subtomo_files, labels, num_unmatched, unmatched_info = preprocess_tomo_with_predictions(
+    subtomo_files, labels, counts, unmatched_info = preprocess_tomo_with_predictions(
         tomo_paths,
         pred_path=args.pred_coords,
         label_path=os.path.join(args.labels_root, "Picks"),
@@ -410,8 +427,9 @@ def run_single_tomogram_mode(args):
         tomo_name=tomo_name,
         batch_size=args.batch_size,
         save_full_results=True,  # full evaluation in single mode,
-        num_unmatched=num_unmatched,
-        unmatched_info=unmatched_info
+        counts=counts,
+        unmatched_info=unmatched_info,
+        vis_samples=args.vis_samples
     )
 
 
@@ -444,6 +462,11 @@ def main():
     parser.add_argument(
         "--pred_coords", "-p", required=True,
         help="Either a single detection JSON file or a directory of files."
+    )
+    parser.add_argument(
+        "--vis_samples", type=int, default=16,
+        help="Rendered example crops per tomogram, drawn at random with a fixed seed. "
+             "0 disables them, a negative value renders every crop."
     )
 
     args = parser.parse_args()
