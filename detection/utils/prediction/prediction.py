@@ -74,9 +74,9 @@ def get_prediction_torch_em(
         updated_tiling["tile"][dim] = tiling["tile"][dim] - 2 * tiling["halo"][dim]
     print(f"updated_tiling {updated_tiling}")
 
-    # get block_shape and halo
-    block_shape = [updated_tiling["tile"]["z"], updated_tiling["tile"]["x"], updated_tiling["tile"]["y"]]
-    halo = [updated_tiling["halo"]["z"], updated_tiling["halo"]["x"], updated_tiling["halo"]["y"]]
+    # get block_shape and halo, in the volume's axis order (z, y, x)
+    block_shape = [updated_tiling["tile"]["z"], updated_tiling["tile"]["y"], updated_tiling["tile"]["x"]]
+    halo = [updated_tiling["halo"]["z"], updated_tiling["halo"]["y"], updated_tiling["halo"]["x"]]
 
     t0 = time.time()
     device = "cuda" if torch.cuda.is_available() else "cpu"

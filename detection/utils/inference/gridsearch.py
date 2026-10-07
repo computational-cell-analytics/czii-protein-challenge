@@ -4,19 +4,18 @@ from tqdm import tqdm
 import zarr
 import json
 import os
-from skimage.feature import blob_log, peak_local_max
 from ..evaluation.evaluation_metrics import metric_coords
+from .postprocessing import detections_from_prediction
 from ..prediction.prediction import get_prediction_torch_em, load_detection_model
 from ..training.tiling_helper import parse_tiling
-from detection.data_processing.create_heatmap import parse_json_files
+from detection.data_processing.create_heatmap import parse_json_files, resolve_picks_folder
 import numpy as np
 
 from detection.config import (
-    ADJ_FACTOR,
-    CZII_SMALLEST_PROTEIN_SIZE,
-    GRIDSEARCH_BETA,
-    GRIDSEARCH_THRESH_RANGE,
+    GRIDSEARCH_BETA, GRIDSEARCH_THRESH_RANGE,
+    CZII_MATCH_DISTANCE_VOXELS, DEFAULT_MATCH_DISTANCE, FLOW_SIGMA,
 )
+from .postprocessing import PEAK_MIN_DISTANCE, NMS_RADIUS
 
 #TODO Do I want to make this more flexible??
 TRAIN_ROOT = "/mnt/lustre-grete/usr/u12095/cryo-et/czii_challenge/data/"
@@ -119,14 +118,26 @@ def get_full_label_path(json_val_path, val_path):
     # Remove the prefix "split-" and the suffix ".json"
     experiment_name = file_name[len("split-"):-len(".json")]
 
-    base_label_path = os.path.join(LABEL_ROOT, experiment_name, val_path)
+    return resolve_picks_folder(os.path.join(LABEL_ROOT, experiment_name, val_path))
 
-    # Check if "Picks" folder exists, use that path if it does
-    picks_path = os.path.join(base_label_path, "Picks")
-    if os.path.exists(picks_path) and os.path.isdir(picks_path):
-        return picks_path
-    else:
-        return base_label_path
+
+def gridsearch_fingerprint():
+    """
+    Everything that changes which threshold the sweep picks.
+
+    Cached thresholds are keyed on this as well as on the model and the val split, so changing
+    the sweep range, the F-beta weighting, the match tolerance or the post-processing
+    invalidates the cache instead of silently reusing a number chosen under the old settings.
+    """
+    return {
+        "thresh_range": [float(v) for v in GRIDSEARCH_THRESH_RANGE],
+        "beta": float(GRIDSEARCH_BETA),
+        "match_distance_voxels": {k: float(v) for k, v in sorted(CZII_MATCH_DISTANCE_VOXELS.items())},
+        "default_match_distance": float(DEFAULT_MATCH_DISTANCE),
+        "peak_min_distance": int(PEAK_MIN_DISTANCE),
+        "nms_radius": float(NMS_RADIUS),
+        "flow_sigma": float(FLOW_SIGMA),
+    }
 
 
 def gridsearch(json_val_path, model_path):
@@ -134,7 +145,6 @@ def gridsearch(json_val_path, model_path):
 
     threshes = np.arange(*GRIDSEARCH_THRESH_RANGE)
     min_thresh = float(threshes.min())
-    min_distance = int(CZII_SMALLEST_PROTEIN_SIZE * ADJ_FACTOR)
     data = []
 
     # Load JSON from the file
@@ -156,25 +166,26 @@ def gridsearch(json_val_path, model_path):
         tiling = parse_tiling(tile_shape=None, halo=None) #TODO implement tiling and halo choices
 
         input_volume = get_volume(image_path)
-        pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model=model, verbose=True)[0]
+        pred = get_prediction_torch_em(input_volume=input_volume, tiling=tiling, model=model, verbose=True)
 
         json_files = [
             os.path.join(label_path, f)
             for f in os.listdir(label_path)
             if f.endswith('.json') and f not in ('no_class.json', 'albumin.json', "actin.json", "mt.json")
         ]
-        label_coords, _ = parse_json_files(json_files)
+        label_coords, label_classes = parse_json_files(json_files)
 
-        # peak_local_max is expensive, so run it once at the lowest threshold. Raising
-        # threshold_abs only removes peaks below it (it never revives peaks that were
-        # suppressed by a stronger neighbour), so the peaks for any higher threshold are
-        # exactly the subset of these peaks whose intensity clears that threshold.
-        all_peaks = peak_local_max(pred, min_distance=min_distance, threshold_abs=min_thresh)
-        peak_vals = pred[tuple(all_peaks.T)] if len(all_peaks) else np.empty(0)
+        # Score the same coordinates inference produces: peak finding, flow correction and NMS.
+        # Running the whole chain once at the lowest threshold is exact, because raising the
+        # threshold only removes low-scoring peaks, and greedy NMS decides a peak's fate from
+        # the higher-scoring peaks alone - all of which survive into the higher-threshold set.
+        all_coords, peak_vals = detections_from_prediction(pred, min_thresh)
 
         for thresh in tqdm(threshes):
-            pred_coords = all_peaks[peak_vals >= thresh] if len(all_peaks) else all_peaks
-            precision, recall, f1, _, _, _ = metric_coords(label_coords, pred_coords)
+            pred_coords = all_coords[peak_vals > thresh]
+            precision, recall, f1, _, _, _ = metric_coords(
+                label_coords, pred_coords, gt_classes=label_classes
+            )
 
             data.append([val_path, thresh, f1, precision, recall])
 

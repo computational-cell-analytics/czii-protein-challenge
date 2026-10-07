@@ -9,6 +9,7 @@ import json
 from detection.utils.prediction.prediction import get_prediction_torch_em, load_detection_model
 from detection.utils.inference.protein_detection import protein_detection
 from detection.utils.training.tiling_helper import parse_tiling
+from detection.utils.inference.gridsearch import gridsearch_fingerprint
 
 # Filename used to cache the gridsearch threshold inside the output folder so that
 # re-runs / restarts do not recompute it.
@@ -105,10 +106,14 @@ def _load_cached_threshold(output_path, model_path, json_val_path):
             cache = json.load(f)
     except (json.JSONDecodeError, OSError):
         return None
-    if cache.get("model_path") == model_path and cache.get("json_val_path") == json_val_path:
-        print(f"Reusing cached threshold {cache['threshold']} from {cache_file}")
-        return cache["threshold"]
-    return None
+    if cache.get("model_path") != model_path or cache.get("json_val_path") != json_val_path:
+        return None
+    if cache.get("settings") != gridsearch_fingerprint():
+        print(f"Ignoring cached threshold in {cache_file}: it was picked under different "
+              f"gridsearch settings (range/beta/match tolerance/post-processing).")
+        return None
+    print(f"Reusing cached threshold {cache['threshold']} from {cache_file}")
+    return cache["threshold"]
 
 
 def _save_cached_threshold(output_path, model_path, json_val_path, threshold):
@@ -116,7 +121,12 @@ def _save_cached_threshold(output_path, model_path, json_val_path, threshold):
     cache_file = os.path.join(output_path, THRESHOLD_CACHE_NAME)
     with open(cache_file, "w") as f:
         json.dump(
-            {"model_path": model_path, "json_val_path": json_val_path, "threshold": threshold},
+            {
+                "model_path": model_path,
+                "json_val_path": json_val_path,
+                "threshold": threshold,
+                "settings": gridsearch_fingerprint(),
+            },
             f, indent=4,
         )
 
